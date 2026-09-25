@@ -1,4 +1,4 @@
-"""ORM models. Phase 1 covers identity, audit, risk events and control state.
+"""ORM models. Phase 1: identity, audit, risk events, control state. Phase 2: market data.
 
 Market, research, backtest and execution tables are added by the phase that
 first needs them, each with its own migration.
@@ -113,3 +113,27 @@ class TradingControl(Base):
     changed_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
     )
+
+
+# Phase 2 market-data tables (imported here so they register on Base.metadata).
+from app.models.market import (  # noqa: E402
+    CorporateAction,
+    DataConflict,
+    DataIngestionRun,
+    Price,
+    Stock,
+)
+
+__all__ = [
+    "AuditLog",
+    "CorporateAction",
+    "DataConflict",
+    "DataIngestionRun",
+    "Price",
+    "RiskEvent",
+    "RiskEventSeverity",
+    "Stock",
+    "TradingControl",
+    "User",
+    "UserRole",
+]

@@ -50,11 +50,17 @@ def _migrated_db() -> Iterator[None]:
 def _clean_state() -> Iterator[None]:
     yield
     with get_engine().begin() as conn:
-        # Test-only cleanup: the append-only trigger is bypassed here and nowhere else.
+        # Test-only cleanup: immutability triggers are bypassed here and nowhere else.
         conn.execute(text("ALTER TABLE audit_logs DISABLE TRIGGER USER"))
         conn.execute(text("DELETE FROM audit_logs"))
         conn.execute(text("ALTER TABLE audit_logs ENABLE TRIGGER USER"))
         conn.execute(text("DELETE FROM risk_events"))
+        for table in ("data_conflicts", "prices", "corporate_actions"):
+            conn.execute(text(f"ALTER TABLE {table} DISABLE TRIGGER USER"))
+            conn.execute(text(f"DELETE FROM {table}"))  # noqa: S608  (fixed table names)
+            conn.execute(text(f"ALTER TABLE {table} ENABLE TRIGGER USER"))
+        conn.execute(text("DELETE FROM data_ingestion_runs"))
+        conn.execute(text("DELETE FROM stocks"))
         conn.execute(
             text(
                 "UPDATE trading_controls SET kill_switch_active = true, changed_by = NULL, "
