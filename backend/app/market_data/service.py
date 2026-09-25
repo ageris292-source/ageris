@@ -398,7 +398,8 @@ class PriceSeries:
     licensed: bool | None
     bars: list[StoredBar]
     actions: list[CorporateActionIn]
-    as_of: datetime | None  # point-in-time cut-off applied (available_at <= as_of)
+    as_of: datetime | None  # market cut-off applied: available_at <= as_of
+    knowledge_at: datetime | None = None  # vintage cut-off applied: retrieved_at <= knowledge_at
 
 
 def _latest_versions(
@@ -409,6 +410,7 @@ def _latest_versions(
     start: date,
     end: date,
     as_of: datetime | None,
+    knowledge_at: datetime | None,
 ) -> list[Price]:
     ranked = select(
         Price.id,
@@ -422,9 +424,12 @@ def _latest_versions(
         Price.session_date.between(start, end),
     )
     if as_of is not None:
-        # Point-in-time: only versions we had actually retrieved AND that the
-        # market had available by as_of.
-        ranked = ranked.where(Price.available_at <= as_of, Price.retrieved_at <= as_of)
+        # Market point-in-time (spec §33): only bars the market had by as_of.
+        ranked = ranked.where(Price.available_at <= as_of)
+    if knowledge_at is not None:
+        # Vintage: only versions Aegis had retrieved by knowledge_at. Pinning
+        # this makes a past analysis reproducible despite later revisions.
+        ranked = ranked.where(Price.retrieved_at <= knowledge_at)
     sub = ranked.subquery()
     return list(
         db.scalars(
@@ -448,7 +453,20 @@ def _stored_choice(db: Session, stock: Stock) -> tuple[str, str] | None:
     return None if row is None else (row[0], row[1])
 
 
-def get_actions(db: Session, stock: Stock, source: str) -> list[CorporateActionIn]:
+def get_actions(
+    db: Session,
+    stock: Stock,
+    source: str,
+    *,
+    as_of: datetime | None = None,
+    knowledge_at: datetime | None = None,
+) -> list[CorporateActionIn]:
+    filters = [CorporateAction.stock_id == stock.id, CorporateAction.source == source]
+    if as_of is not None:
+        # An action is known once its ex-date session has started (IST date).
+        filters.append(CorporateAction.ex_date <= (as_of + timedelta(hours=5, minutes=30)).date())
+    if knowledge_at is not None:
+        filters.append(CorporateAction.retrieved_at <= knowledge_at)
     ranked = (
         select(
             CorporateAction.id,
@@ -459,7 +477,7 @@ def get_actions(db: Session, stock: Stock, source: str) -> list[CorporateActionI
             )
             .label("rn"),
         )
-        .where(CorporateAction.stock_id == stock.id, CorporateAction.source == source)
+        .where(*filters)
         .subquery()
     )
     rows = db.scalars(
@@ -488,14 +506,22 @@ def get_series(
     end: date,
     *,
     as_of: datetime | None = None,
+    knowledge_at: datetime | None = None,
 ) -> PriceSeries:
+    """Price series in the requested basis.
+
+    Caveat for historical as_of with a provider-adjusted source: the stored
+    split-adjusted levels reflect splits known at retrieval, so absolute
+    rupee levels before a later split differ from what traded at the time.
+    Ratios (returns, RSI, MACD/price, volatility) are unaffected.
+    """
     ticker = ticker_of(stock)
     choice = _stored_choice(db, stock)
     if choice is None:
-        return PriceSeries(ticker, basis, None, False, None, None, [], [], as_of)
+        return PriceSeries(ticker, basis, None, False, None, None, [], [], as_of, knowledge_at)
     stored_basis, source = PriceBasis(choice[0]), choice[1]
-    rows = _latest_versions(db, stock, stored_basis.value, source, start, end, as_of)
-    actions = get_actions(db, stock, source)
+    rows = _latest_versions(db, stock, stored_basis.value, source, start, end, as_of, knowledge_at)
+    actions = get_actions(db, stock, source, as_of=as_of, knowledge_at=knowledge_at)
     bars = [
         Bar(
             session=r.session_date,
@@ -531,6 +557,7 @@ def get_series(
         out,
         actions,
         as_of,
+        knowledge_at,
     )
 
 
@@ -544,6 +571,21 @@ def freshness_for(
     cfg = config or get_config()
     return evaluate_daily_freshness(
         latest_session(db, stock),
+        now=now,
+        calendar=get_calendar(cfg.market_data.calendar),
+        availability_lag=timedelta(minutes=cfg.market_data.eod_availability_lag_minutes),
+        max_sessions_behind=cfg.freshness.daily_bars_max_sessions_behind,
+    )
+
+
+def freshness_for_date(
+    latest: date | None, now: datetime, config: AegisConfig | None = None
+) -> FreshnessResult:
+    """Freshness of a series whose latest session is `latest`, judged at `now`
+    (use the analysis as_of for point-in-time evaluation)."""
+    cfg = config or get_config()
+    return evaluate_daily_freshness(
+        latest,
         now=now,
         calendar=get_calendar(cfg.market_data.calendar),
         availability_lag=timedelta(minutes=cfg.market_data.eod_availability_lag_minutes),

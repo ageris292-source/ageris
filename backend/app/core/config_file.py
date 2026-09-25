@@ -117,6 +117,52 @@ class MarketDataRules(_Strict):
     providers: dict[Literal["yahoo", "csv_import"], ProviderSettings]
 
 
+Period = Annotated[int, Field(ge=2, le=400)]
+
+
+class TechnicalRules(_Strict):
+    sma_periods: Annotated[list[Period], Field(min_length=1)]
+    rsi_period: Period
+    rsi_overbought: Annotated[float, Field(gt=50, lt=100)]
+    rsi_oversold: Annotated[float, Field(gt=0, lt=50)]
+    macd_fast: Period
+    macd_slow: Period
+    macd_signal: Period
+    bollinger_period: Period
+    bollinger_std_devs: Annotated[float, Field(gt=0, le=5)]
+    squeeze_lookback: Period
+    atr_period: Period
+    adx_period: Period
+    adx_trend_threshold: Annotated[float, Field(gt=0, lt=100)]
+    volatility_window: Period
+    momentum_windows: Annotated[list[Period], Field(min_length=1)]
+    breakout_lookback: Period
+    breakout_volume_multiple: Annotated[float, Field(ge=1, le=10)]
+    cross_lookback_sessions: Annotated[int, Field(ge=1, le=60)]
+    divergence_lookback: Period
+    pivot_window: Annotated[int, Field(ge=1, le=20)]
+    sr_lookback: Period
+    sr_cluster_tolerance: Annotated[float, Field(gt=0, lt=0.2)]
+    sr_max_levels: Annotated[int, Field(ge=1, le=10)]
+    min_history_sessions: Annotated[int, Field(ge=30, le=2000)]
+    invalidation_atr_multiple: Annotated[float, Field(gt=0, le=10)]
+    high_volatility_ratio: Annotated[float, Field(gt=1, le=10)]
+    category_weights: dict[
+        Literal["trend", "momentum", "breakout", "volume", "mean_reversion"],
+        Annotated[float, Field(ge=0, le=1)],
+    ]
+
+    @model_validator(mode="after")
+    def _consistent(self) -> Self:
+        if self.macd_fast >= self.macd_slow:
+            raise ValueError("macd_fast must be shorter than macd_slow")
+        if self.min_history_sessions < max(self.sma_periods):
+            raise ValueError("min_history_sessions must cover the longest SMA period")
+        if abs(sum(self.category_weights.values()) - 1.0) > 1e-9:
+            raise ValueError("technical.category_weights must sum to 1")
+        return self
+
+
 class CostSchedule(_Strict):
     brokerage_bps: Bps
     exchange_fee_bps: Bps
@@ -139,6 +185,7 @@ class AegisConfig(_Strict):
     liquidity: LiquidityRules
     execution: ExecutionRules
     market_data: MarketDataRules
+    technical: TechnicalRules
     transaction_costs: Annotated[dict[str, CostSchedule], Field(min_length=1)]
 
     def fingerprint(self) -> str:

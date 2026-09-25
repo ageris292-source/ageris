@@ -128,12 +128,12 @@ def test_revision_creates_new_version_and_preserves_conflict(
     ).json()["bars"][0]
     assert (latest["close"], latest["data_version"]) == ("1234.5000", 2)
 
-    # Point-in-time: as of the first retrieval, only version 1 existed.
-    as_of = datetime.fromisoformat(first["retrieved_at"]) + timedelta(microseconds=1)
+    # Vintage: with knowledge as of the first retrieval, only version 1 existed.
+    known = datetime.fromisoformat(first["retrieved_at"]) + timedelta(microseconds=1)
     pit = api.get(
         "/stocks/TCS.NS/prices",
         headers=admin_h,
-        params={"start": session, "end": session, "as_of": as_of.isoformat()},
+        params={"start": session, "end": session, "knowledge_at": known.isoformat()},
     ).json()["bars"][0]
     assert pit["data_version"] == 1 and pit["close"] != "1234.5000"
 

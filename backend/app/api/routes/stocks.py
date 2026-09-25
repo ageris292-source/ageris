@@ -187,7 +187,11 @@ def prices(
     end: date | None = None,
     as_of: Annotated[
         datetime | None,
-        Query(description="Point-in-time cut-off: only data available at this instant"),
+        Query(description="Market cut-off: only bars publicly available at this instant"),
+    ] = None,
+    knowledge_at: Annotated[
+        datetime | None,
+        Query(description="Vintage cut-off: only data versions Aegis had retrieved by then"),
     ] = None,
 ) -> PriceSeriesOut:
     stock = _stock(db, ticker)
@@ -195,10 +199,15 @@ def prices(
     start = start or end - timedelta(days=QUALITY_WINDOW_DAYS)
     if start > end:
         raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, "start must be <= end")
-    if as_of is not None and as_of.tzinfo is None:
-        raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, "as_of must include a timezone")
+    for name, value in (("as_of", as_of), ("knowledge_at", knowledge_at)):
+        if value is not None and value.tzinfo is None:
+            raise HTTPException(
+                status.HTTP_422_UNPROCESSABLE_ENTITY, f"{name} must include a timezone"
+            )
     try:
-        series = service.get_series(db, stock, basis, start, end, as_of=as_of)
+        series = service.get_series(
+            db, stock, basis, start, end, as_of=as_of, knowledge_at=knowledge_at
+        )
     except AdjustmentError as exc:
         raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, str(exc)) from exc
     return PriceSeriesOut(
@@ -210,6 +219,7 @@ def prices(
         licensed=series.licensed,
         licensing_notice=UNLICENSED_NOTICE if series.licensed is False else None,
         as_of=as_of,
+        knowledge_at=knowledge_at,
         bars=[_bar_out(b) for b in series.bars],
     )
 

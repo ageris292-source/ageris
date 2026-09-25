@@ -5,7 +5,7 @@
 # being relied on (spec §26, §73). The file is validated strictly at startup:
 # unknown keys, out-of-range values and inconsistent limits abort boot.
 
-config_version: "2026.09.2"
+config_version: "2026.09.3"
 
 trade_gates:
   minimum_expected_net_return: 0.05      # 5% net of all modelled costs
@@ -65,6 +65,42 @@ market_data:
     csv_import:
       enabled: true
       licensed: true                     # operator attests the imported file comes from a licensed/official source
+
+# Technical analysis agent (Phase 3). Periods follow common textbook defaults;
+# like every threshold here they are starting values to be validated, not optima.
+technical:
+  sma_periods: [20, 50, 200]
+  rsi_period: 14
+  rsi_overbought: 70
+  rsi_oversold: 30
+  macd_fast: 12
+  macd_slow: 26
+  macd_signal: 9
+  bollinger_period: 20
+  bollinger_std_devs: 2.0
+  squeeze_lookback: 120                  # bandwidth in its lowest decile over this window => squeeze
+  atr_period: 14
+  adx_period: 14
+  adx_trend_threshold: 25
+  volatility_window: 20
+  momentum_windows: [21, 63, 126, 252]
+  breakout_lookback: 55
+  breakout_volume_multiple: 1.5
+  cross_lookback_sessions: 10
+  divergence_lookback: 60
+  pivot_window: 5                        # a swing point needs this many sessions on each side
+  sr_lookback: 250
+  sr_cluster_tolerance: 0.015
+  sr_max_levels: 3
+  min_history_sessions: 260              # enough for SMA200 plus a year of context
+  invalidation_atr_multiple: 2.0
+  high_volatility_ratio: 1.5             # 20d vol above 1.5x its 1y median => risk flag
+  category_weights:                      # composite score weights (renormalised over categories present)
+    trend: 0.35
+    momentum: 0.30
+    breakout: 0.15
+    volume: 0.10
+    mean_reversion: 0.10
 
 # Transaction-cost schedules, expressed in basis points of traded value.
 # The example NSE schedule below MUST be checked against the current

@@ -143,6 +143,59 @@ export interface PriceSeries {
   bars: BarOut[];
 }
 
+export interface AgentSignal {
+  name: string;
+  category: string;
+  direction: "bullish" | "bearish" | "neutral";
+  strength: number;
+  detail: string;
+}
+
+export interface AgentOutput {
+  agent: string;
+  agent_version: string;
+  ticker: string;
+  as_of: string;
+  knowledge_at: string | null;
+  generated_at: string;
+  status: "ok" | "insufficient_data" | "data_unusable" | "failed";
+  score: number | null;
+  score_basis: string;
+  confidence: number;
+  confidence_basis: string;
+  signals: AgentSignal[];
+  evidence: { ref: string; description: string }[];
+  risks: string[];
+  invalidation_conditions: string[];
+  metrics: Record<string, number | null>;
+  data_quality: number;
+  data_snapshot_id: string | null;
+  config_fingerprint: string;
+  warnings: string[];
+}
+
+export interface IndicatorPoint {
+  session: string;
+  close: number;
+  sma_mid: number | null;
+  sma_long: number | null;
+  rsi: number | null;
+  macd: number | null;
+  macd_signal: number | null;
+  macd_histogram: number | null;
+}
+
+export interface IndicatorSeries {
+  ticker: string;
+  basis: Basis;
+  calculation_version: string;
+  sma_mid_period: number;
+  sma_long_period: number;
+  rsi_overbought: number;
+  rsi_oversold: number;
+  points: IndicatorPoint[];
+}
+
 export class ApiError extends Error {
   constructor(public status: number, message: string) {
     super(message);
@@ -205,4 +258,13 @@ export const api = {
     ),
   ingest: (token: string, ticker: string) =>
     request<IngestionRun>(`/stocks/${encodeURIComponent(ticker)}/ingest`, json({}), token),
+  technical: (token: string, ticker: string) =>
+    request<AgentOutput>(`/technical/${encodeURIComponent(ticker)}`, {}, token),
+  indicators: (token: string, ticker: string, start: string, end: string) =>
+    request<IndicatorSeries>(
+      `/technical/${encodeURIComponent(ticker)}/indicators?` +
+        new URLSearchParams({ start, end }).toString(),
+      {},
+      token,
+    ),
 };

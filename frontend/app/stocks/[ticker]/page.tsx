@@ -7,8 +7,16 @@ import { Login } from "@/components/Login";
 import { Nav } from "@/components/Nav";
 import { PriceChart } from "@/components/PriceChart";
 import { FreshnessBadge, QualityBadge } from "@/components/StatusBadge";
+import { TechnicalPanel } from "@/components/TechnicalPanel";
 import { useSession } from "@/components/useSession";
-import { api, type Basis, type PriceSeries, type StockDetail } from "@/lib/api";
+import {
+  api,
+  type AgentOutput,
+  type Basis,
+  type IndicatorSeries,
+  type PriceSeries,
+  type StockDetail,
+} from "@/lib/api";
 
 const RANGES = [
   { key: "1M", days: 31 },
@@ -51,6 +59,9 @@ export default function StockPage() {
   const [showTable, setShowTable] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [tech, setTech] = useState<AgentOutput | null>(null);
+  const [techBusy, setTechBusy] = useState(false);
+  const [indicators, setIndicators] = useState<IndicatorSeries | null>(null);
 
   const loadDetail = useCallback(async () => {
     try {
@@ -69,10 +80,30 @@ export default function StockPage() {
   useEffect(() => {
     if (!token || !end) return;
     const days = RANGES.find((r) => r.key === range)!.days;
-    guard((t) => api.prices(t, ticker, basis, isoMinusDays(end, days), end))
+    const start = isoMinusDays(end, days);
+    guard((t) => api.prices(t, ticker, basis, start, end))
       .then((s) => s && setSeries(s))
       .catch((err) => setError(err instanceof Error ? err.message : "Request failed"));
+    guard((t) => api.indicators(t, ticker, start, end))
+      .then((s) => s && setIndicators(s))
+      .catch(() => setIndicators(null));
   }, [token, guard, ticker, basis, range, end]);
+
+  const runTechnical = useCallback(async () => {
+    setTechBusy(true);
+    try {
+      const out = await guard((t) => api.technical(t, ticker));
+      if (out) setTech(out);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Technical analysis failed");
+    } finally {
+      setTechBusy(false);
+    }
+  }, [guard, ticker]);
+
+  useEffect(() => {
+    if (token && end) void runTechnical();
+  }, [token, end, runTechnical]);
 
   async function refresh() {
     setBusy(true);
@@ -190,7 +221,12 @@ export default function StockPage() {
               </div>
             </div>
 
-            {series && !showTable && <PriceChart bars={series.bars} />}
+            {series && !showTable && (
+              <PriceChart
+                bars={series.bars}
+                indicators={basis === "split_adjusted" ? indicators : null}
+              />
+            )}
             {series && showTable && (
               <div className="max-h-80 overflow-auto">
                 <table className="w-full font-mono text-xs">
@@ -226,6 +262,8 @@ export default function StockPage() {
               </p>
             )}
           </section>
+
+          <TechnicalPanel out={tech} busy={techBusy} onRun={runTechnical} />
 
           <div className="grid gap-4 md:grid-cols-2">
             <Panel title="Data quality">

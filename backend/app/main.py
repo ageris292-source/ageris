@@ -10,7 +10,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app import __version__
-from app.api.routes import auth, stocks, system
+from app.api.routes import auth, stocks, system, technical
 from app.core.config_file import get_config
 from app.core.settings import get_settings
 
@@ -53,6 +53,7 @@ def create_app() -> FastAPI:
     app.include_router(system.router)
     app.include_router(auth.router)
     app.include_router(stocks.router)
+    app.include_router(technical.router)
     return app
 
 
