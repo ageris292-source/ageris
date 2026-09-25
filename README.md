@@ -13,8 +13,11 @@ of profit.
 | Phase | Scope | State |
 |---|---|---|
 | 1 | Foundation: API, DB, migrations, config, auth, kill switch, Docker, CI, UI shell | **Done** ([report](docs/phase-1-report.md)) |
-| 2 | Market data providers, validation, persistence, stock page | Next |
-| 3–15 | Agents, trade risk engine, backtesting, paper trading, … | Planned |
+| 2 | Market data (NSE/BSE): providers, validation, versioned storage, stock pages | **Done** ([report](docs/phase-2-report.md)) |
+| 3 | Technical analysis agent | Next |
+| 4–15 | Agents, trade risk engine, backtesting, paper trading, … | Planned |
+
+Market scope: **Indian equities only** (NSE `.NS`, BSE `.BO`).
 
 Live trading is **not available** in this build. Execution readiness reports
 `broker_health` and `risk_engine` as `UNKNOWN`, which blocks both paper and
@@ -65,7 +68,7 @@ Redis DB 15):
 
 ```bash
 cd backend
-../.venv/bin/pytest            # 53 tests
+../.venv/bin/pytest            # 119 tests
 ../.venv/bin/ruff check . && ../.venv/bin/ruff format --check . && ../.venv/bin/mypy app
 ```
 
@@ -82,7 +85,7 @@ docs/        Phase reports and design notes
 Directories for agents, pipelines, models and backtesting are created by the
 phase that first implements them, not as empty placeholders.
 
-## API (Phase 1)
+## API
 
 | Method | Path | Auth | Purpose |
 |---|---|---|---|
@@ -91,3 +94,13 @@ phase that first implements them, not as empty placeholders.
 | GET | `/auth/me` | user | Current user |
 | GET | `/risk/status` | user | Execution readiness, kill switch, config fingerprint |
 | POST | `/trading/kill-switch` | user / admin | Halt (any user) or resume (admin only) |
+| GET | `/stocks` | user | Universe with freshness |
+| POST | `/stocks` | admin | Add `TCS.NS` / `RELIANCE.BO` |
+| GET | `/stocks/{ticker}` | user | Latest bar, provenance, data quality, corporate actions, runs |
+| GET | `/stocks/{ticker}/prices` | user | `basis`, `start`, `end`, point-in-time `as_of` |
+| POST | `/stocks/{ticker}/ingest` | user | Fetch/refresh daily bars (validated, versioned, audited) |
+| POST | `/stocks/{ticker}/import-csv` | admin | Import licensed/official CSV with declared source + basis |
+| GET | `/data/providers` | user | Provider availability and licensing |
+
+Data from the Yahoo adapter is **unlicensed and research-only**; it is tagged as
+such on every stored bar.

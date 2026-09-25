@@ -39,6 +39,110 @@ export interface Me {
   role: "admin" | "analyst";
 }
 
+export type Basis = "raw" | "split_adjusted" | "total_return";
+
+export interface Freshness {
+  status: GateStatus;
+  latest_session: string | null;
+  expected_session: string | null;
+  sessions_behind: number | null;
+  reason: string;
+}
+
+export interface StockSummary {
+  ticker: string;
+  symbol: string;
+  exchange: "NSE" | "BSE";
+  name: string | null;
+  currency: string;
+  latest_session: string | null;
+  freshness: Freshness;
+  last_run_status: string | null;
+}
+
+export interface BarOut {
+  session: string;
+  open: string;
+  high: string;
+  low: string;
+  close: string;
+  volume: number;
+  source: string;
+  data_version: number;
+  retrieved_at: string;
+  effective_at: string;
+  available_at: string;
+}
+
+export interface QualityIssue {
+  code: string;
+  severity: "critical" | "warning" | "info";
+  session: string | null;
+  detail: string;
+}
+
+export interface IngestionRun {
+  id: number;
+  provider: string;
+  licensed: boolean;
+  basis: Basis | null;
+  status: string;
+  requested_start: string;
+  requested_end: string;
+  started_at: string;
+  finished_at: string | null;
+  retrieved_at: string | null;
+  rows_received: number;
+  rows_inserted: number;
+  rows_unchanged: number;
+  rows_revised: number;
+  rows_rejected: number;
+  quality_score: number | null;
+  usable: boolean;
+  error: string | null;
+}
+
+export interface StockDetail extends StockSummary {
+  latest_bar: BarOut | null;
+  stored_basis: Basis | null;
+  source: string | null;
+  licensed: boolean | null;
+  licensing_notice: string | null;
+  data_quality: {
+    window_start: string | null;
+    window_end: string | null;
+    usable: boolean;
+    quality_score: number;
+    expected_sessions: number;
+    missing_session_count: number;
+    coverage: number;
+    minimum_score_required: number;
+    issues: QualityIssue[];
+  } | null;
+  corporate_actions: {
+    kind: "split" | "dividend";
+    ex_date: string;
+    numerator: string | null;
+    denominator: string | null;
+    amount: string | null;
+  }[];
+  recent_runs: IngestionRun[];
+  open_conflicts: number;
+}
+
+export interface PriceSeries {
+  ticker: string;
+  basis: Basis;
+  stored_basis: Basis | null;
+  derived: boolean;
+  source: string | null;
+  licensed: boolean | null;
+  licensing_notice: string | null;
+  as_of: string | null;
+  currency: string;
+  bars: BarOut[];
+}
+
 export class ApiError extends Error {
   constructor(public status: number, message: string) {
     super(message);
@@ -62,6 +166,12 @@ async function request<T>(path: string, init: RequestInit = {}, token?: string):
   return (await res.json()) as T;
 }
 
+const json = (body: unknown): RequestInit => ({
+  method: "POST",
+  headers: { "Content-Type": "application/json" },
+  body: JSON.stringify(body),
+});
+
 export const api = {
   health: () => request<Health>("/health"),
   login: (email: string, password: string) =>
@@ -81,4 +191,18 @@ export const api = {
       },
       token,
     ),
+  stocks: (token: string) => request<StockSummary[]>("/stocks", {}, token),
+  addStock: (token: string, ticker: string) =>
+    request<StockSummary>("/stocks", json({ ticker }), token),
+  stock: (token: string, ticker: string) =>
+    request<StockDetail>(`/stocks/${encodeURIComponent(ticker)}`, {}, token),
+  prices: (token: string, ticker: string, basis: Basis, start: string, end: string) =>
+    request<PriceSeries>(
+      `/stocks/${encodeURIComponent(ticker)}/prices?` +
+        new URLSearchParams({ basis, start, end }).toString(),
+      {},
+      token,
+    ),
+  ingest: (token: string, ticker: string) =>
+    request<IngestionRun>(`/stocks/${encodeURIComponent(ticker)}/ingest`, json({}), token),
 };

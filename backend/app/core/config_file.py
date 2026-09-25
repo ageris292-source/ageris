@@ -41,6 +41,7 @@ class FreshnessRules(_Strict):
     news_minutes: Annotated[int, Field(gt=0, le=10_080)]
     financials_days: Annotated[int, Field(gt=0, le=400)]
     macro_days: Annotated[int, Field(gt=0, le=120)]
+    daily_bars_max_sessions_behind: Annotated[int, Field(ge=0, le=5)]
 
 
 class RiskControls(_Strict):
@@ -98,6 +99,24 @@ class ExecutionRules(_Strict):
         return self
 
 
+class ProviderSettings(_Strict):
+    enabled: bool
+    # Unlicensed sources may feed research only; later gates reject them for paper/live.
+    licensed: bool
+    timeout_seconds: Annotated[float, Field(gt=0, le=60)] = 10.0
+
+
+class MarketDataRules(_Strict):
+    market: Literal["IN"]  # Indian equities only in this build
+    calendar: Literal["XBOM"]
+    eod_availability_lag_minutes: Annotated[int, Field(ge=0, le=24 * 60)]
+    abnormal_move_threshold: Annotated[float, Field(gt=0.0, lt=1.0)]
+    stale_price_run_sessions: Annotated[int, Field(ge=2, le=60)]
+    max_missing_session_ratio: Annotated[float, Field(ge=0.0, lt=0.5)]
+    provider_cache_seconds: Annotated[int, Field(ge=0, le=86_400)]
+    providers: dict[Literal["yahoo", "csv_import"], ProviderSettings]
+
+
 class CostSchedule(_Strict):
     brokerage_bps: Bps
     exchange_fee_bps: Bps
@@ -119,6 +138,7 @@ class AegisConfig(_Strict):
     position_sizing: PositionSizing
     liquidity: LiquidityRules
     execution: ExecutionRules
+    market_data: MarketDataRules
     transaction_costs: Annotated[dict[str, CostSchedule], Field(min_length=1)]
 
     def fingerprint(self) -> str:

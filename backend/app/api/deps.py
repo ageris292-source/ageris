@@ -12,7 +12,7 @@ from sqlalchemy.orm import Session
 
 from app.core.security import decode_access_token
 from app.db.session import get_db
-from app.models import User
+from app.models import User, UserRole
 
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/auth/token")
 
@@ -38,3 +38,12 @@ def get_current_user(db: DbSession, token: Annotated[str, Depends(oauth2_scheme)
 
 
 CurrentUser = Annotated[User, Depends(get_current_user)]
+
+
+def require_admin(user: CurrentUser) -> User:
+    if user.role is not UserRole.ADMIN:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="admin role required")
+    return user
+
+
+AdminUser = Annotated[User, Depends(require_admin)]

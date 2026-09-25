@@ -2,25 +2,9 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { api, ApiError, type GateStatus, type Health, type Me, type RiskStatus } from "@/lib/api";
-
-const TOKEN_KEY = "aegis.token";
-
-function readToken(): string | null {
-  try {
-    return sessionStorage.getItem(TOKEN_KEY);
-  } catch {
-    return null;
-  }
-}
-
-function writeToken(token: string | null) {
-  try {
-    if (token) sessionStorage.setItem(TOKEN_KEY, token);
-    else sessionStorage.removeItem(TOKEN_KEY);
-  } catch {
-    /* storage unavailable: token lives in memory only */
-  }
-}
+import { readToken, writeToken } from "@/lib/auth";
+import { Login } from "@/components/Login";
+import { Nav } from "@/components/Nav";
 
 const statusColor: Record<GateStatus, string> = {
   PASS: "text-pass",
@@ -34,53 +18,6 @@ function Panel({ title, children }: { title: string; children: React.ReactNode }
       <h2 className="mb-4 text-xs font-semibold uppercase tracking-wider text-muted">{title}</h2>
       {children}
     </section>
-  );
-}
-
-function Login({ onToken }: { onToken: (t: string) => void }) {
-  const [email, setEmail] = useState("");
-  const [password, setPassword] = useState("");
-  const [error, setError] = useState<string | null>(null);
-  const [busy, setBusy] = useState(false);
-
-  async function submit(e: React.FormEvent) {
-    e.preventDefault();
-    setBusy(true);
-    setError(null);
-    try {
-      const { access_token } = await api.login(email, password);
-      onToken(access_token);
-    } catch (err) {
-      setError(err instanceof ApiError ? err.message : "Cannot reach the Aegis API");
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  return (
-    <main className="mx-auto mt-24 max-w-sm px-4">
-      <h1 className="mb-1 text-2xl font-semibold">Aegis</h1>
-      <p className="mb-8 text-sm text-muted">Sign in to the research console.</p>
-      <form onSubmit={submit} className="space-y-3">
-        <input
-          className="w-full rounded border border-line bg-panel px-3 py-2"
-          type="email" placeholder="Email" autoComplete="username" required
-          value={email} onChange={(e) => setEmail(e.target.value)}
-        />
-        <input
-          className="w-full rounded border border-line bg-panel px-3 py-2"
-          type="password" placeholder="Password" autoComplete="current-password" required
-          value={password} onChange={(e) => setPassword(e.target.value)}
-        />
-        {error && <p className="text-sm text-fail">{error}</p>}
-        <button
-          className="w-full rounded bg-ink px-3 py-2 font-medium text-surface disabled:opacity-50"
-          disabled={busy}
-        >
-          {busy ? "Signing in…" : "Sign in"}
-        </button>
-      </form>
-    </main>
   );
 }
 
@@ -206,20 +143,7 @@ export default function Dashboard() {
           DEMO DATA — NOT FOR TRADING
         </div>
       )}
-      <header className="mb-8 flex flex-wrap items-center justify-between gap-4">
-        <div className="flex items-center gap-3">
-          <h1 className="text-2xl font-semibold">Aegis</h1>
-          {health && (
-            <span className="rounded border border-line px-2 py-0.5 font-mono text-xs uppercase">
-              {health.system_mode} mode
-            </span>
-          )}
-        </div>
-        <div className="flex items-center gap-4 text-sm text-muted">
-          {me && <span>{me.email} · {me.role}</span>}
-          <button className="underline" onClick={signOut}>Sign out</button>
-        </div>
-      </header>
+      <Nav mode={health?.system_mode} email={me?.email} role={me?.role} onSignOut={signOut} />
 
       {error && <p className="mb-6 text-sm text-fail">{error}</p>}
 
@@ -297,8 +221,8 @@ export default function Dashboard() {
             </dl>
           )}
           <p className="mt-4 text-xs text-muted">
-            Market data, research agents and rankings arrive in later phases. Nothing on this
-            page is a trade signal.
+            Market data lives under Stocks. Research agents and rankings arrive in later
+            phases. Nothing on this page is a trade signal.
           </p>
         </Panel>
       </div>

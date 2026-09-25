@@ -5,7 +5,7 @@
 # being relied on (spec §26, §73). The file is validated strictly at startup:
 # unknown keys, out-of-range values and inconsistent limits abort boot.
 
-config_version: "2026.09.1"
+config_version: "2026.09.2"
 
 trade_gates:
   minimum_expected_net_return: 0.05      # 5% net of all modelled costs
@@ -21,6 +21,7 @@ freshness:
   news_minutes: 30
   financials_days: 95
   macro_days: 7
+  daily_bars_max_sessions_behind: 1     # completed sessions the stored series may lag by
 
 risk_controls:
   daily_loss_limit: 0.02
@@ -45,6 +46,25 @@ liquidity:
 execution:
   maximum_acceptable_entry_deviation: 0.005      # 0.5% worse than modelled price => block/recalc
   require_human_approval_for_live: true
+
+market_data:
+  market: IN                             # Indian equities only (NSE, BSE)
+  calendar: XBOM                         # exchange_calendars code; NSE/BSE share trading holidays
+  # End-of-day bars are treated as publicly available only this long after the
+  # session close. Backtests may use a bar no earlier than close + lag.
+  eod_availability_lag_minutes: 60
+  abnormal_move_threshold: 0.20          # |close-to-close| above this w/o a corporate action is flagged
+  stale_price_run_sessions: 5            # identical OHLC for this many sessions is flagged
+  max_missing_session_ratio: 0.02        # above this share of missing sessions the series is unusable
+  provider_cache_seconds: 900
+  providers:
+    yahoo:
+      enabled: true
+      licensed: false                    # unofficial endpoint: research use only, never paper/live
+      timeout_seconds: 10
+    csv_import:
+      enabled: true
+      licensed: true                     # operator attests the imported file comes from a licensed/official source
 
 # Transaction-cost schedules, expressed in basis points of traded value.
 # The example NSE schedule below MUST be checked against the current
