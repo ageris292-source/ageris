@@ -1,0 +1,63 @@
+# Aegis runtime configuration.
+#
+# Every threshold here is a STARTING DEFAULT, not a claim of optimality.
+# All of them must be validated with walk-forward historical data before
+# being relied on (spec §26, §73). The file is validated strictly at startup:
+# unknown keys, out-of-range values and inconsistent limits abort boot.
+
+config_version: "2026.09.1"
+
+trade_gates:
+  minimum_expected_net_return: 0.05      # 5% net of all modelled costs
+  minimum_edge_vs_benchmark: 0.03        # 3% over benchmark, same horizon
+  minimum_probability_of_profit: 0.65    # P(net return > 0)
+  minimum_reward_risk_ratio: 2.0         # expected upside / expected downside
+  minimum_data_quality_score: 0.90
+  maximum_calibration_error: 0.05        # expected calibration error ceiling
+  minimum_out_of_sample_periods: 4       # walk-forward folds required
+
+freshness:
+  prices_seconds: 60
+  news_minutes: 30
+  financials_days: 95
+  macro_days: 7
+
+risk_controls:
+  daily_loss_limit: 0.02
+  weekly_loss_limit: 0.05
+  max_strategy_drawdown: 0.10
+  max_portfolio_drawdown: 0.15
+  max_single_position_weight: 0.10
+  max_sector_weight: 0.30
+  max_gross_exposure: 1.00               # 1.0 = fully invested, no leverage
+
+position_sizing:
+  method: fixed_fractional               # fixed_fractional | volatility_target | fractional_kelly
+  risk_per_trade: 0.005                  # 0.5% of equity at risk per trade
+  kelly_fraction_cap: 0.25               # never unrestricted Kelly; hard ceiling 0.5
+  target_annual_volatility: 0.15
+
+liquidity:
+  minimum_average_daily_traded_value: 50000000   # in instrument currency (e.g. INR 5 crore)
+  maximum_participation_of_adv: 0.01             # position <= 1% of avg daily volume
+  maximum_spread_bps: 25
+
+execution:
+  maximum_acceptable_entry_deviation: 0.005      # 0.5% worse than modelled price => block/recalc
+  require_human_approval_for_live: true
+
+# Transaction-cost schedules, expressed in basis points of traded value.
+# The example NSE schedule below MUST be checked against the current
+# exchange / regulator / broker schedules before any paper or live use.
+transaction_costs:
+  NSE_EQ_DELIVERY:
+    brokerage_bps: 3.0
+    exchange_fee_bps: 0.30
+    regulatory_fee_bps: 0.01
+    stamp_duty_buy_bps: 1.5
+    securities_tax_bps: 10.0              # applied on buy and sell
+    gst_rate_on_fees: 0.18                # applied to brokerage + exchange + regulatory
+    slippage_bps: 5.0
+    half_spread_bps: 3.0
+    market_impact_bps_per_pct_adv: 2.0
+    annual_financing_rate: 0.0
