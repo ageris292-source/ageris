@@ -14,8 +14,9 @@ of profit.
 |---|---|---|
 | 1 | Foundation: API, DB, migrations, config, auth, kill switch, Docker, CI, UI shell | **Done** ([report](docs/phase-1-report.md)) |
 | 2 | Market data (NSE/BSE): providers, validation, versioned storage, stock pages | **Done** ([report](docs/phase-2-report.md)) |
-| 3 | Technical analysis agent | Next |
-| 4–15 | Agents, trade risk engine, backtesting, paper trading, … | Planned |
+| 3 | Technical analysis agent (indicators, signals, feature store) | **Done** ([report](docs/phase-3-report.md)) |
+| 4 | Fundamental agent | Next — needs a financials data source decision |
+| 5–15 | Agents, trade risk engine, backtesting, paper trading, … | Planned |
 
 Market scope: **Indian equities only** (NSE `.NS`, BSE `.BO`).
 
@@ -68,7 +69,7 @@ Redis DB 15):
 
 ```bash
 cd backend
-../.venv/bin/pytest            # 119 tests
+../.venv/bin/pytest            # 166 tests
 ../.venv/bin/ruff check . && ../.venv/bin/ruff format --check . && ../.venv/bin/mypy app
 ```
 
@@ -101,6 +102,12 @@ phase that first implements them, not as empty placeholders.
 | POST | `/stocks/{ticker}/ingest` | user | Fetch/refresh daily bars (validated, versioned, audited) |
 | POST | `/stocks/{ticker}/import-csv` | admin | Import licensed/official CSV with declared source + basis |
 | GET | `/data/providers` | user | Provider availability and licensing |
+| GET | `/technical/{ticker}` | user | Run + record the technical agent (`as_of`, `knowledge_at` for exact replay) |
+| GET | `/technical/{ticker}/indicators` | user | SMA/RSI/MACD/Bollinger chart series (with warm-up) |
 
 Data from the Yahoo adapter is **unlicensed and research-only**; it is tagged as
 such on every stored bar.
+
+The technical score (0–100, 50 = no tilt) is a descriptive composite, **not a
+probability of profit**, and its "signal agreement" is an uncalibrated heuristic
+until the backtester (Phase 10) can calibrate it.

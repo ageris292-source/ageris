@@ -121,6 +121,7 @@ class PriceSeriesOut(BaseModel):
     licensed: bool | None
     licensing_notice: str | None
     as_of: datetime | None
+    knowledge_at: datetime | None = None
     currency: str = "INR"
     bars: list[BarOut]
 
