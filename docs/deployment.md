@@ -113,3 +113,37 @@ After an upgrade, read the config fingerprint on the dashboard: every decision r
 - No live broker. The live execution path is permanently unavailable in this build.
 - No horizontal scaling of the worker. Run exactly one `worker` (it also runs beat, the scheduler).
 - No managed secret store. Use your platform's (for example Docker secrets or Vault) if required.
+
+## Railway
+
+The same production rules apply; Railway provides TLS and the public domains. The layout is five services in one project:
+
+| Service | Source | Key settings |
+|---|---|---|
+| `pgvector` | Railway pgvector template (Postgres 16 + pgvector) | – |
+| `Redis` | Railway Redis | – |
+| `backend` | this repo | variable `RAILWAY_DOCKERFILE_PATH=docker/backend.Dockerfile`, `AEGIS_ML=0` (build arg), public domain, healthcheck path `/health` |
+| `worker` | this repo | same Dockerfile and `AEGIS_ML=0`; start command `celery -A app.scheduler.celery_app worker --beat --loglevel=info`; no domain; exactly one replica |
+| `frontend` | this repo | `RAILWAY_DOCKERFILE_PATH=docker/frontend.Dockerfile`, `NEXT_PUBLIC_AEGIS_API_URL=https://<backend domain>` (build arg), public domain |
+
+Variables for `backend` and `worker` (Railway reference syntax):
+
+```
+AEGIS_ENV=production
+DATABASE_URL=postgresql+psycopg://${{pgvector.PGUSER}}:${{pgvector.PGPASSWORD}}@${{pgvector.PGHOST}}:${{pgvector.PGPORT}}/${{pgvector.PGDATABASE}}
+REDIS_URL=${{Redis.REDIS_URL}}
+AEGIS_CORS_ORIGINS=["https://<frontend domain>"]
+AEGIS_ALLOWED_HOSTS=["<backend domain>","healthcheck.railway.app"]
+AEGIS_TRUSTED_PROXY_HOPS=1
+AEGIS_TOKEN_MINUTES=30
+AEGIS_ML=0
+AEGIS_JWT_SECRET=<set it yourself; 48+ random characters>
+```
+
+`healthcheck.railway.app` is the `Host` header that Railway's deploy health check sends. `AEGIS_ML=0` skips torch and FinBERT: the image stays small enough for 1 GB plans, and news sentiment reports "unavailable". The backend listens on Railway's `$PORT`, and migrations run on every start.
+
+Create the first admin from the backend service's shell:
+
+```
+python -m app.cli create-user --email you@example.in --role admin
+```
