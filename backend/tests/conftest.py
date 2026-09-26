@@ -96,6 +96,10 @@ def _clean_state() -> Iterator[None]:
             conn.execute(text(f"DELETE FROM {table}"))  # noqa: S608  (fixed table names)
             conn.execute(text(f"ALTER TABLE {table} ENABLE TRIGGER USER"))
         conn.execute(text("DELETE FROM agent_runs"))
+        for table in ("model_predictions", "model_monitor_runs"):
+            conn.execute(text(f"ALTER TABLE {table} DISABLE TRIGGER USER"))
+            conn.execute(text(f"DELETE FROM {table}"))  # noqa: S608  (fixed table names)
+            conn.execute(text(f"ALTER TABLE {table} ENABLE TRIGGER USER"))
         conn.execute(text("DELETE FROM model_versions"))
         conn.execute(text("DELETE FROM backtest_runs"))
         conn.execute(text("DELETE FROM positions"))

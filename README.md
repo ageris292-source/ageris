@@ -24,7 +24,8 @@ of profit.
 | 10 | Walk-forward backtesting, calibrated LightGBM, reproducibility, model registry | **Done** ([report](docs/phase-10-report.md)) |
 | 11 | Paper trading: human approval, pre-order re-check, idempotent orders, fills, theses | **Done** ([report](docs/phase-11-report.md)) |
 | 12 | Daily ranking through the engine, no-trade analytics, counterfactuals, alerts (in-app, Telegram, email) | **Done** ([report](docs/phase-12-report.md)) |
-| 13–15 | Monitoring, security/deploy, live scaffolding | In progress |
+| 13 | Model monitoring: PSI drift vs training data (null-calibrated), calibration decay on realised outcomes, auto-disable | **Done** ([report](docs/phase-13-report.md)) |
+| 14–15 | Security/deploy, live scaffolding | In progress |
 
 Market scope: **Indian equities only** (NSE `.NS`, BSE `.BO`).
 
@@ -77,7 +78,7 @@ Redis DB 15):
 
 ```bash
 cd backend
-../.venv/bin/pytest            # 325 tests
+../.venv/bin/pytest            # 332 tests
 ../.venv/bin/ruff check . && ../.venv/bin/ruff format --check . && ../.venv/bin/mypy app
 ```
 
@@ -118,6 +119,8 @@ phase that first implements them, not as empty placeholders.
 | GET | `/alerts` | user | Alerts with unread count (`unread_only`, `limit`) |
 | POST | `/alerts/{id}/read`, `/alerts/read-all` | user | Mark alerts read (audited) |
 | GET | `/alerts/channels` | user | In-app / Telegram / email availability |
+| POST | `/monitoring/run` | admin | Log predictions, check drift + calibration decay, retire a failing model |
+| GET | `/monitoring/overview`, `/monitoring/runs`, `/monitoring/runs/{id}` | admin | Latest check per model, history, full detail |
 
 Data from the Yahoo adapter is **unlicensed and research-only**; it is tagged as
 such on every stored bar.

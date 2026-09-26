@@ -65,6 +65,12 @@ celery_app.conf.update(
             "task": "aegis.daily_ranking",
             "schedule": crontab(minute=30, hour=12, day_of_week="mon-fri"),
         },
+        # After the ranking: log the active models' predictions, check drift
+        # and calibration decay, retire a failing model and alert.
+        "model-monitor": {
+            "task": "aegis.model_monitor",
+            "schedule": crontab(minute=45, hour=12, day_of_week="mon-fri"),
+        },
         "refresh-eod-prices": {
             "task": "aegis.refresh_eod_prices",
             "schedule": crontab(minute=45, hour=11, day_of_week="mon-fri"),
@@ -218,4 +224,19 @@ def daily_ranking() -> dict[str, object]:
             "headline": run.headline,
             "qualified": run.qualified,
             "evaluated": run.evaluated,
+        }
+
+
+@celery_app.task(name="aegis.model_monitor")  # type: ignore[untyped-decorator]
+def model_monitor() -> dict[str, object]:
+    from app.db.session import _session_factory
+    from app.monitoring.service import run_monitoring
+
+    now = datetime.now(UTC)
+    with _session_factory()() as db:
+        runs = run_monitoring(db, now)
+        return {
+            "job": "model_monitor",
+            "at": now.isoformat(),
+            "results": {str(r.model_id): f"{r.status} ({r.action})" for r in runs},
         }

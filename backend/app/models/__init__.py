@@ -135,6 +135,9 @@ from app.models.market import (  # noqa: E402
     Stock,
 )
 
+# Phase 13 model monitoring.
+from app.models.monitoring import ModelMonitorRun, ModelPrediction  # noqa: E402
+
 # Phase 5 news + documents.
 from app.models.news import Document, DocumentChunk, NewsItem  # noqa: E402
 
@@ -171,6 +174,8 @@ __all__ = [
     "DocumentChunk",
     "FinancialFact",
     "MacroObservation",
+    "ModelMonitorRun",
+    "ModelPrediction",
     "ModelVersion",
     "NewsItem",
     "PaperExecution",

@@ -85,8 +85,8 @@ export function Nav({
             </span>
           )}
         </div>
-        <nav className="flex gap-4 text-sm">
-          {LINKS.map((l) => {
+        <nav className="flex flex-wrap gap-x-4 gap-y-1 text-sm">
+          {[...LINKS, ...(role === "admin" ? [{ href: "/monitoring", label: "Monitoring" }] : [])].map((l) => {
             const active = l.href === "/" ? path === "/" : path.startsWith(l.href);
             return (
               <Link

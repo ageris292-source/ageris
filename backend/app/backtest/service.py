@@ -22,6 +22,7 @@ from app.core.config_file import get_config
 from app.market_data.calendar import get_calendar
 from app.market_data.service import ticker_of
 from app.models import BacktestRun, ModelVersion
+from app.monitoring.service import feature_reference
 from app.services.audit import record_audit
 from app.trade.costs import round_trip
 
@@ -167,6 +168,9 @@ def run_backtest(
                 expected_return_map=er_map,
                 artifact=blob,
                 artifact_sha256=hashlib.sha256(blob).hexdigest(),
+                feature_reference=feature_reference(
+                    labelled, cfg.monitoring.psi_bins, cfg.monitoring.drift_window_sessions
+                ),
             )
         )
         run.reproducibility = {

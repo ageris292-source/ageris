@@ -608,6 +608,69 @@ export interface AlertChannels {
   min_severity_to_push: AlertSeverity;
 }
 
+export type MonitorStatus = "PASS" | "WARN" | "FAIL" | "UNKNOWN";
+
+export interface DriftFeature {
+  feature: string;
+  psi: number | null;
+  status: MonitorStatus;
+  warn_at?: number;
+  fail_at?: number;
+}
+
+export interface MonitorRun {
+  id: number;
+  created_at: string | null;
+  as_of: string;
+  model_id: number;
+  model_name: string | null;
+  model_status: string | null;
+  horizon: number | null;
+  status: MonitorStatus;
+  action: "none" | "retired";
+  reasons: string[];
+  predictions_logged: number;
+  max_psi: number | null;
+  drift_status: MonitorStatus;
+  calibration_status: MonitorStatus;
+  live_ece: number | null;
+  backtest_ece: number | null;
+  config_fingerprint: string;
+  drift?: { status: MonitorStatus; reasons: string[]; samples: number; max_psi?: number | null; features: DriftFeature[] };
+  calibration?: {
+    status: MonitorStatus;
+    reasons: string[];
+    matured: number;
+    pending: number;
+    evaluated: number;
+    backtest_ece: number;
+    live_ece?: number;
+    decay?: number;
+    brier?: number | null;
+    auc?: number | null;
+    base_rate?: number | null;
+    mean_predicted?: number;
+    window_start?: string;
+    window_end?: string;
+    curve?: { bin_low: number; bin_high: number; mean_predicted: number; observed_rate: number; count: number }[];
+  };
+}
+
+export interface MonitoringOverview {
+  as_of: string;
+  rules: Record<string, number | boolean>;
+  models: {
+    model_id: number;
+    name: string;
+    status: string;
+    horizon: number;
+    valid_from: string;
+    monitorable: boolean;
+    predictions: number;
+    latest: MonitorRun | null;
+  }[];
+}
+
 export class ApiError extends Error {
   constructor(public status: number, message: string) {
     super(message);
@@ -751,6 +814,10 @@ export const api = {
   readAllAlerts: (token: string) =>
     request<{ marked: number }>("/alerts/read-all", { method: "POST" }, token),
   alertChannels: (token: string) => request<AlertChannels>("/alerts/channels", {}, token),
+  monitoringOverview: (token: string) => request<MonitoringOverview>("/monitoring/overview", {}, token),
+  monitoringRuns: (token: string, modelId?: number) =>
+    request<MonitorRun[]>(`/monitoring/runs?limit=60${modelId ? `&model_id=${modelId}` : ""}`, {}, token),
+  runMonitoring: (token: string) => request<MonitorRun[]>("/monitoring/run", { method: "POST" }, token),
   riskAgent: (token: string, ticker: string) =>
     request<AgentOutput>(`/risk-agent/${encodeURIComponent(ticker)}`, {}, token),
   portfolios: (token: string) => request<PortfolioSummary[]>("/portfolios", {}, token),

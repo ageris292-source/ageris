@@ -410,6 +410,30 @@ class AlertRules(_Strict):
     min_severity_to_push: Literal["info", "warning", "critical"]
 
 
+class MonitoringRules(_Strict):
+    psi_bins: Annotated[int, Field(ge=4, le=50)]
+    psi_warn: Annotated[float, Field(gt=0, le=1)]
+    psi_fail: Annotated[float, Field(gt=0, le=2)]
+    min_drifted_features_to_fail: Annotated[int, Field(ge=1, le=50)]
+    drift_window_sessions: Annotated[int, Field(ge=1, le=250)]
+    min_drift_samples: Annotated[int, Field(ge=10, le=100_000)]
+    calibration_window_predictions: Annotated[int, Field(ge=20, le=100_000)]
+    min_matured_predictions: Annotated[int, Field(ge=10, le=100_000)]
+    max_live_calibration_error: Fraction
+    max_calibration_decay: Fraction
+    auto_disable: bool
+
+    @model_validator(mode="after")
+    def _consistent(self) -> Self:
+        if self.psi_warn >= self.psi_fail:
+            raise ValueError("monitoring.psi_warn must be below psi_fail")
+        if self.min_matured_predictions > self.calibration_window_predictions:
+            raise ValueError(
+                "monitoring.min_matured_predictions must be <= calibration_window_predictions"
+            )
+        return self
+
+
 class LightGbmParams(_Strict):
     n_estimators: Annotated[int, Field(ge=10, le=5000)]
     learning_rate: Annotated[float, Field(gt=0, le=1)]
@@ -454,6 +478,7 @@ class AegisConfig(_Strict):
     paper_trading: PaperTradingRules
     ranking: RankingRules
     alerts: AlertRules
+    monitoring: MonitoringRules
     transaction_costs: Annotated[dict[str, CostSchedule], Field(min_length=1)]
 
     @model_validator(mode="after")

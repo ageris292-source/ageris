@@ -290,6 +290,27 @@ alerts:
   email_enabled: false                   # needs AEGIS_SMTP_URL + AEGIS_ALERT_EMAIL_TO
   min_severity_to_push: warning          # info | warning | critical
 
+# Model monitoring (Phase 13). Each active model is checked daily against
+# its own training data (feature drift, PSI) and against realised outcomes
+# of its own logged predictions (calibration decay). A FAIL retires the
+# model (auto_disable) and raises a critical alert; the engine then has no
+# probability source for that horizon, so every entry is rejected.
+monitoring:
+  psi_bins: 10                           # training-decile bins per feature
+  # A feature drifts only when its PSI exceeds BOTH the absolute threshold and
+  # the 95th/99th percentile of PSI seen in the model's own training history
+  # for windows of the same length (autocorrelated features vary a lot).
+  psi_warn: 0.10                         # floor for WARN (moderate shift)
+  psi_fail: 0.25                         # floor for FAIL (major shift)
+  min_drifted_features_to_fail: 3        # FAIL when this many features drift
+  drift_window_sessions: 60              # recent sessions pooled across the universe
+  min_drift_samples: 100                 # fewer current rows -> drift UNKNOWN
+  calibration_window_predictions: 1000   # newest matured predictions evaluated
+  min_matured_predictions: 100           # fewer -> calibration UNKNOWN (awaiting outcomes)
+  max_live_calibration_error: 0.08       # live ECE of P(profit) above this -> FAIL
+  max_calibration_decay: 0.05            # live ECE - backtest ECE above this -> FAIL
+  auto_disable: true                     # retire the model on FAIL
+
 # Walk-forward backtesting and the probability model (Phase 10).
 # Horizons are in trading days. Labels start at the NEXT session's close
 # (a signal at close t can only be traded after t), so no same-bar fills.

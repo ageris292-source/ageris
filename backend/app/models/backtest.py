@@ -83,6 +83,9 @@ class ModelVersion(Base):
     expected_return_map: Mapped[list[dict[str, Any]]] = mapped_column(JSONB)
     artifact: Mapped[bytes] = mapped_column(LargeBinary)  # JSON: both calibrated models
     artifact_sha256: Mapped[str] = mapped_column(String(64))
+    # Training feature distribution (decile edges + proportions) that live
+    # data is compared with for drift (Phase 13). None = cannot be monitored.
+    feature_reference: Mapped[dict[str, Any] | None] = mapped_column(JSONB)
     activated_by: Mapped[uuid.UUID | None] = mapped_column(
         UUID(as_uuid=True), ForeignKey("users.id")
     )
