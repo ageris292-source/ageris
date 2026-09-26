@@ -123,7 +123,7 @@ The same production rules apply; Railway provides TLS and the public domains. Th
 | `pgvector` | Railway pgvector template (Postgres 16 + pgvector) | – |
 | `Redis` | Railway Redis | – |
 | `backend` | this repo | variable `RAILWAY_DOCKERFILE_PATH=docker/backend.Dockerfile`, `AEGIS_ML=0` (build arg), public domain, healthcheck path `/health` |
-| `worker` | this repo | same Dockerfile and `AEGIS_ML=0`; start command `celery -A app.scheduler.celery_app worker --beat --loglevel=info`; no domain; exactly one replica |
+| `worker` | this repo | same Dockerfile, `AEGIS_ML=0` and `AEGIS_PROCESS=worker` (runs Celery worker + beat instead of the API); no domain; exactly one replica |
 | `frontend` | this repo | `RAILWAY_DOCKERFILE_PATH=docker/frontend.Dockerfile`, `NEXT_PUBLIC_AEGIS_API_URL=https://<backend domain>` (build arg), public domain |
 
 Variables for `backend` and `worker` (Railway reference syntax):
