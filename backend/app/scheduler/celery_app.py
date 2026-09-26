@@ -1,13 +1,15 @@
 """Celery application (spec §67).
 
-Jobs: heartbeat (Phase 1) and daily NSE/BSE end-of-day price refresh
-(Phase 2). Analysis and ranking jobs are added by the phases that implement
-them; nothing here fabricates work.
+Jobs: heartbeat, EOD prices, news, fundamentals, macro, weekly retrain
+(candidates only), paper EOD and the daily ranking. Failed ingestions raise
+an alert. Nothing here places an order.
 """
 
 from __future__ import annotations
 
+import logging
 from datetime import UTC, datetime
+from typing import Any
 
 from celery import Celery
 from celery.schedules import crontab
@@ -57,6 +59,12 @@ celery_app.conf.update(
             "task": "aegis.paper_eod",
             "schedule": crontab(minute=15, hour=12, day_of_week="mon-fri"),
         },
+        # After paper-eod: rank the universe through the Trade Risk Engine.
+        # Produces a record + alert only; it never proposes or places orders.
+        "daily-ranking": {
+            "task": "aegis.daily_ranking",
+            "schedule": crontab(minute=30, hour=12, day_of_week="mon-fri"),
+        },
         "refresh-eod-prices": {
             "task": "aegis.refresh_eod_prices",
             "schedule": crontab(minute=45, hour=11, day_of_week="mon-fri"),
@@ -97,7 +105,22 @@ def refresh_eod_prices() -> dict[str, object]:
             except Exception as exc:  # isolate per-stock failures; run is still audited
                 db.rollback()
                 results[str(service.ticker_of(stock))] = f"error: {exc.__class__.__name__}"
+        _alert_failures(db, "EOD prices", results, now)
     return {"at": now.isoformat(), "results": results}
+
+
+def _alert_failures(db: Any, job: str, results: dict[str, str], now: datetime) -> None:
+    """Raise (at most one per job per day) an alert for failed ingestions.
+    An alerting problem never breaks the ingestion job itself."""
+    from app.alerts.service import alert_ingestion_failures
+    from app.risk.service import ist_date
+
+    try:
+        alert_ingestion_failures(db, job, results, ist_date(now))
+        db.commit()
+    except Exception:  # pragma: no cover - defensive
+        db.rollback()
+        logging.getLogger(__name__).exception("could not record ingestion alert for %s", job)
 
 
 def _for_each_stock(label: str, fn: object) -> dict[str, object]:
@@ -116,6 +139,7 @@ def _for_each_stock(label: str, fn: object) -> dict[str, object]:
             except Exception as exc:  # isolate per-stock failures
                 db.rollback()
                 results[str(ticker_of(stock))] = f"error: {exc.__class__.__name__}"
+        _alert_failures(db, label, results, datetime.now(UTC))
     return {"job": label, "at": datetime.now(UTC).isoformat(), "results": results}
 
 
@@ -144,6 +168,7 @@ def refresh_macro() -> dict[str, object]:
 
     with _session_factory()() as db:
         results = ms.ingest_all(db, None)
+        _alert_failures(db, "macro", results, datetime.now(UTC))
     return {"job": "macro", "at": datetime.now(UTC).isoformat(), "results": results}
 
 
@@ -176,3 +201,21 @@ def paper_eod() -> dict[str, object]:
         "snapshots": n,
         "events": [f"{e.thesis_id}:{e.kind}" for e in events],
     }
+
+
+@celery_app.task(name="aegis.daily_ranking")  # type: ignore[untyped-decorator]
+def daily_ranking() -> dict[str, object]:
+    from app.db.session import _session_factory
+    from app.ranking.service import run_ranking
+
+    now = datetime.now(UTC)
+    with _session_factory()() as db:
+        run = run_ranking(db, now, None)
+        return {
+            "job": "daily_ranking",
+            "at": now.isoformat(),
+            "run": run.id,
+            "headline": run.headline,
+            "qualified": run.qualified,
+            "evaluated": run.evaluated,
+        }

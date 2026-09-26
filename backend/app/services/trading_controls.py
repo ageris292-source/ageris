@@ -14,6 +14,7 @@ from typing import Literal
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from app.alerts.service import raise_alert
 from app.core.modes import SystemMode
 from app.core.settings import Settings
 from app.models import RiskEvent, RiskEventSeverity, TradingControl, User, UserRole
@@ -86,13 +87,23 @@ def activate_kill_switch(db: Session, actor: User, reason: str) -> KillSwitchSta
             requires_review=True,
         )
     )
-    record_audit(
+    entry = record_audit(
         db,
         action="kill_switch.activate",
         actor_user_id=actor.id,
         entity_type="trading_controls",
         entity_id="1",
         details={"reason": reason},
+    )
+    db.flush()
+    raise_alert(
+        db,
+        kind="kill_switch",
+        severity="critical",
+        title="Kill switch ACTIVATED: all trading halted",
+        body=f"Activated by {actor.email}: {reason}",
+        dedupe_key=f"kill_switch:{entry.id}",
+        link="/",
     )
     db.commit()
     log.critical("KILL SWITCH ACTIVATED by %s: %s", actor.email, reason)
@@ -129,13 +140,26 @@ def deactivate_kill_switch(db: Session, actor: User, reason: str) -> KillSwitchS
             details={"actor": str(actor.id)},
         )
     )
-    record_audit(
+    entry = record_audit(
         db,
         action="kill_switch.deactivate",
         actor_user_id=actor.id,
         entity_type="trading_controls",
         entity_id="1",
         details={"reason": reason},
+    )
+    db.flush()
+    raise_alert(
+        db,
+        kind="kill_switch",
+        severity="warning",
+        title="Kill switch released by an admin",
+        body=(
+            f"Released by {actor.email}: {reason}. Every order still needs all 24 gates "
+            "and human approval; live trading remains disabled."
+        ),
+        dedupe_key=f"kill_switch:{entry.id}",
+        link="/",
     )
     db.commit()
     log.warning("kill switch deactivated by %s: %s", actor.email, reason)

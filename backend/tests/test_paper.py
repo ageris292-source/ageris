@@ -248,6 +248,14 @@ def test_monitor_flags_stop_and_suggests_an_exit(env: dict[str, Any], db: Sessio
     assert client.post("/paper/monitor", headers=h).json()["events"] == []  # once per session
     th = client.get(f"/paper/portfolios/{env['pid']}", headers=h).json()["theses"][0]
     assert th["events"][0]["kind"] == "STOP_HIT" and th["status"] == "OPEN"  # human decides
+    stop_alert = next(
+        a
+        for a in client.get("/alerts", headers=h).json()["alerts"]
+        if a["kind"] == "thesis.stop_hit"
+    )
+    assert stop_alert["severity"] == "critical" and "human must still approve" in stop_alert["body"]
+    kinds_alerted = [a["kind"] for a in client.get("/alerts", headers=h).json()["alerts"]]
+    assert kinds_alerted.count("thesis.stop_hit") == 1  # no duplicate on the second check
 
 
 def test_paper_endpoints_need_auth(client: TestClient) -> None:

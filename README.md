@@ -23,7 +23,8 @@ of profit.
 | 9 | Trade Risk Engine: 24 ordered gates, cost model, sizing, immutable decisions | **Done** ([report](docs/phase-9-report.md)) |
 | 10 | Walk-forward backtesting, calibrated LightGBM, reproducibility, model registry | **Done** ([report](docs/phase-10-report.md)) |
 | 11 | Paper trading: human approval, pre-order re-check, idempotent orders, fills, theses | **Done** ([report](docs/phase-11-report.md)) |
-| 12–15 | Ranking + alerts, monitoring, security/deploy, live scaffolding | In progress |
+| 12 | Daily ranking through the engine, no-trade analytics, counterfactuals, alerts (in-app, Telegram, email) | **Done** ([report](docs/phase-12-report.md)) |
+| 13–15 | Monitoring, security/deploy, live scaffolding | In progress |
 
 Market scope: **Indian equities only** (NSE `.NS`, BSE `.BO`).
 
@@ -76,7 +77,7 @@ Redis DB 15):
 
 ```bash
 cd backend
-../.venv/bin/pytest            # 166 tests
+../.venv/bin/pytest            # 325 tests
 ../.venv/bin/ruff check . && ../.venv/bin/ruff format --check . && ../.venv/bin/mypy app
 ```
 
@@ -111,6 +112,12 @@ phase that first implements them, not as empty placeholders.
 | GET | `/data/providers` | user | Provider availability and licensing |
 | GET | `/technical/{ticker}` | user | Run + record the technical agent (`as_of`, `knowledge_at` for exact replay) |
 | GET | `/technical/{ticker}/indicators` | user | SMA/RSI/MACD/Bollinger chart series (with warm-up) |
+| POST | `/ranking/run` | admin | Rank the universe through the Trade Risk Engine (records only, never orders) |
+| GET | `/ranking/latest`, `/ranking/history` | user | Latest ranking with rows; ranking history |
+| GET | `/ranking/counterfactuals` | user | Realised forward returns by qualified / first blocking gate |
+| GET | `/alerts` | user | Alerts with unread count (`unread_only`, `limit`) |
+| POST | `/alerts/{id}/read`, `/alerts/read-all` | user | Mark alerts read (audited) |
+| GET | `/alerts/channels` | user | In-app / Telegram / email availability |
 
 Data from the Yahoo adapter is **unlicensed and research-only**; it is tagged as
 such on every stored bar.

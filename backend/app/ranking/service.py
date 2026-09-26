@@ -14,6 +14,7 @@ from __future__ import annotations
 import math
 import uuid
 from collections import Counter
+from collections.abc import Callable
 from datetime import UTC, datetime, timedelta
 from decimal import Decimal
 from typing import Any
@@ -27,7 +28,7 @@ from app.analysis.indicators import atr
 from app.backtest.data import universe
 from app.core.config_file import get_config
 from app.market_data import service as md
-from app.market_data.types import PriceBasis
+from app.market_data.types import PriceBasis, Ticker
 from app.models import AnalysisReport, Portfolio, RankingRun, Stock
 from app.orchestrator import service as orch
 from app.portfolio import service as ps
@@ -82,7 +83,10 @@ def run_ranking(
     user_id: uuid.UUID | None,
     portfolio_id: int | None = None,
     refresh: bool | None = None,
+    clock: Callable[[], datetime] = lambda: datetime.now(UTC),
 ) -> RankingRun:
+    """Rank the universe at `as_of`. Records an immutable RankingRun, raises
+    an in-app alert and commits. Places and proposes nothing."""
     cfg = get_config()
     rules = cfg.ranking
     refresh = rules.refresh_reports if refresh is None else refresh
@@ -93,16 +97,27 @@ def run_ranking(
         if all(h["value"] is not None for h in a["holdings"]):
             equity = a["metrics"].get("equity")
 
+    stocks = universe(db, None)
+    if refresh:
+        # Refresh stale reports FIRST, then evaluate everything at one instant
+        # after the refresh: a report is only visible to the engine once it
+        # exists (created_at <= as_of), so no look-ahead and no invisible reports.
+        max_age = timedelta(hours=cfg.trade_engine.max_report_age_hours)
+        refreshed = False
+        for stock in stocks:
+            rep = _latest_report(db, stock, as_of)
+            if rep is None or as_of - rep.created_at > max_age:
+                orch.run_analysis(db, md.ticker_of(stock), as_of, user_id)
+                refreshed = True
+        if refreshed:
+            as_of = max(as_of, clock())
+
     rows: list[dict[str, Any]] = []
     first_fail: Counter[str] = Counter()
     operational: set[str] = set()
-    for stock in universe(db, None):
+    for stock in stocks:
         ticker = str(md.ticker_of(stock))
         rep = _latest_report(db, stock, as_of)
-        max_age = timedelta(hours=cfg.trade_engine.max_report_age_hours)
-        if refresh and (rep is None or as_of - rep.created_at > max_age):
-            orch.run_analysis(db, md.ticker_of(stock), as_of, user_id)
-            rep = _latest_report(db, stock, datetime.now(UTC))
         lv = _levels(db, stock, as_of)
         row: dict[str, Any] = {
             "ticker": ticker,
@@ -173,11 +188,14 @@ def run_ranking(
         )
         rows.append(row)
 
+    def desc(v: float | None) -> float:
+        return -v if v is not None else math.inf  # unknown sorts last
+
     def key(r: dict[str, Any]) -> tuple[Any, ...]:
         return (
             not r["qualified"],
-            -(r.get("expected_net_return") or -1e9),
-            -(r.get("composite") or -1e9),
+            desc(r.get("expected_net_return")),
+            desc(r.get("composite")),
             r["ticker"],
         )
 
@@ -186,7 +204,8 @@ def run_ranking(
         r["rank"] = i
     n = sum(1 for r in rows if r["qualified"])
     headline = (
-        f"{n} QUALIFIED OPPORTUNIT{'Y' if n == 1 else 'IES'} (pending live quote and human approval)"
+        f"{n} QUALIFIED OPPORTUNIT{'Y' if n == 1 else 'IES'} "
+        "(pending live quote and human approval)"
         if n
         else NO_OPPORTUNITIES
     )
@@ -204,7 +223,7 @@ def run_ranking(
     )
     db.add(run)
     db.flush()
-    top = ", ".join(r["ticker"] for r in rows if r["qualified"])[:300]
+    top = ", ".join([r["ticker"] for r in rows if r["qualified"]][: rules.top_n])
     blockers = ", ".join(f"{k} ({v})" for k, v in first_fail.most_common(3))
     raise_alert(
         db,
@@ -242,8 +261,9 @@ def counterfactuals(db: Session, now: datetime) -> dict[str, Any]:
     for run in runs:
         start = ist_date(run.as_of)
         for r in run.rows:
-            stock = db.scalar(select(Stock).where(Stock.symbol == r["ticker"].split(".")[0]))
-            if stock is None:
+            try:
+                stock = md.get_stock(db, Ticker.parse(r["ticker"]))
+            except md.StockNotFoundError:
                 continue
             s = md.get_series(
                 db,

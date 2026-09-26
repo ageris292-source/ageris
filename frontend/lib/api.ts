@@ -544,6 +544,70 @@ export interface PaperPortfolioOut {
   equity_curve: { taken_at: string; equity: number; source: string }[];
 }
 
+export interface RankingRow {
+  rank: number;
+  ticker: string;
+  name: string | null;
+  stance: Stance | null;
+  composite: number | null;
+  report_id: number | null;
+  qualified: boolean;
+  first_failure: string | null;
+  failures: string[];
+  entry?: number;
+  stop?: number;
+  target?: number;
+  quantity?: number;
+  p_profit?: number | null;
+  p_outperform?: number | null;
+  expected_net_return?: number | null;
+  reward_risk?: number | null;
+  round_trip_cost?: number | null;
+  needs_live_quote?: boolean;
+}
+
+export interface RankingRun {
+  id: number;
+  created_at: string | null;
+  as_of: string;
+  horizon: number;
+  portfolio_id: number | null;
+  headline: string;
+  qualified: number;
+  evaluated: number;
+  gate_failure_counts: Record<string, number>;
+  operational_blockers: string[];
+  config_fingerprint: string;
+  rows?: RankingRow[];
+}
+
+export interface Counterfactuals {
+  groups: { group: string; n: number; mean_forward_return: number; hit_rate: number; mean_excess_vs_nifty: number | null }[];
+  pending: number;
+  rankings: number;
+}
+
+export type AlertSeverity = "info" | "warning" | "critical";
+
+export interface AlertOut {
+  id: number;
+  created_at: string | null;
+  kind: string;
+  severity: AlertSeverity;
+  title: string;
+  body: string;
+  link: string | null;
+  deliveries: Record<string, string>;
+  read_at: string | null;
+}
+
+export interface AlertChannels {
+  in_app: { available: boolean; reason: string | null };
+  telegram: { available: boolean; reason: string | null };
+  email: { available: boolean; reason: string | null };
+  min_severity_to_push: AlertSeverity;
+}
+
 export class ApiError extends Error {
   constructor(public status: number, message: string) {
     super(message);
@@ -671,6 +735,22 @@ export const api = {
     request<{ events: { thesis_id: number; kind: string; detail: string }[] }>("/paper/monitor", { method: "POST" }, token),
   proposalsFor: (token: string, portfolioId: number) =>
     request<ProposalRow[]>(`/trade/proposals?portfolio_id=${portfolioId}&limit=100`, {}, token),
+  runRanking: (token: string, refresh?: boolean) =>
+    request<RankingRun>("/ranking/run", json(refresh === undefined ? {} : { refresh }), token),
+  latestRanking: (token: string) => request<RankingRun>("/ranking/latest", {}, token),
+  rankingHistory: (token: string) => request<RankingRun[]>("/ranking/history?limit=30", {}, token),
+  counterfactuals: (token: string) => request<Counterfactuals>("/ranking/counterfactuals", {}, token),
+  alerts: (token: string, unreadOnly = false, limit = 100) =>
+    request<{ unread: number; alerts: AlertOut[] }>(
+      `/alerts?unread_only=${unreadOnly}&limit=${limit}`,
+      {},
+      token,
+    ),
+  readAlert: (token: string, id: number) =>
+    request<AlertOut>(`/alerts/${id}/read`, { method: "POST" }, token),
+  readAllAlerts: (token: string) =>
+    request<{ marked: number }>("/alerts/read-all", { method: "POST" }, token),
+  alertChannels: (token: string) => request<AlertChannels>("/alerts/channels", {}, token),
   riskAgent: (token: string, ticker: string) =>
     request<AgentOutput>(`/risk-agent/${encodeURIComponent(ticker)}`, {}, token),
   portfolios: (token: string) => request<PortfolioSummary[]>("/portfolios", {}, token),

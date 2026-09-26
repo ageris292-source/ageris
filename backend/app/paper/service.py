@@ -11,6 +11,7 @@ from typing import Any
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from app.alerts.service import raise_alert
 from app.core.config_file import get_config
 from app.market_data import service as md
 from app.market_data.calendar import get_calendar
@@ -33,6 +34,13 @@ from app.risk import service as rs
 from app.services.audit import record_audit
 from app.trade import service as ts
 from app.trade.schemas import TradeProposal
+
+THESIS_ALERT_SEVERITY = {
+    "STOP_HIT": "critical",
+    "TARGET_HIT": "warning",
+    "HORIZON_EXPIRED": "warning",
+    "STANCE_DETERIORATED": "warning",
+}
 
 
 class OrderRefusedError(ValueError):
@@ -351,6 +359,21 @@ def monitor(db: Session, now: datetime, user_id: uuid.UUID | None = None) -> lis
                 ev.exit_proposal_id, ev.exit_decision = pid, d.decision
             db.add(ev)
             out.append(ev)
+            exit_note = (
+                f" Exit proposal #{ev.exit_proposal_id} is {ev.exit_decision} by the engine; "
+                "a human must still approve any order."
+                if ev.exit_proposal_id is not None
+                else " Review the thesis; nothing is traded automatically."
+            )
+            raise_alert(
+                db,
+                kind=f"thesis.{kind.lower()}",
+                severity=THESIS_ALERT_SEVERITY[kind],
+                title=f"{th.ticker}: {kind.replace('_', ' ').lower()} (thesis #{th.id})",
+                body=detail + "." + exit_note,
+                dedupe_key=f"thesis:{th.id}:{kind}:{session.isoformat()}",
+                link="/paper",
+            )
             record_audit(
                 db,
                 action="paper.thesis.event",

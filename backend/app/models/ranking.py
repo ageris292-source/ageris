@@ -8,6 +8,7 @@ from typing import Any
 from sqlalchemy import (
     CheckConstraint,
     DateTime,
+    ForeignKey,
     Index,
     Integer,
     String,
@@ -26,12 +27,13 @@ class RankingRun(Base):
     compares what the system said then with what happened afterwards."""
 
     __tablename__ = "ranking_runs"
+    __table_args__ = (Index("ix_ranking_runs_as_of", "as_of"),)
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     as_of: Mapped[datetime] = mapped_column(DateTime(timezone=True))
     horizon: Mapped[int] = mapped_column(Integer)
-    portfolio_id: Mapped[int | None] = mapped_column(Integer)
+    portfolio_id: Mapped[int | None] = mapped_column(ForeignKey("portfolios.id"))
     headline: Mapped[str] = mapped_column(String(80))
     qualified: Mapped[int] = mapped_column(Integer)
     evaluated: Mapped[int] = mapped_column(Integer)

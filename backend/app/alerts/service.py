@@ -5,12 +5,14 @@ from __future__ import annotations
 
 import logging
 import smtplib
+from datetime import date
 from email.message import EmailMessage
 from typing import Any, Protocol
 from urllib.parse import urlparse
 
 import httpx
 from sqlalchemy import select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.core.config_file import get_config
@@ -85,20 +87,26 @@ def configured_channels() -> list[Channel]:
 
 def channel_status() -> dict[str, Any]:
     cfg, s = get_config().alerts, get_settings()
+
+    def status(enabled: bool, configured: bool, env: str) -> dict[str, Any]:
+        if not enabled:
+            return {"available": False, "reason": "disabled in config/aegis.yaml (alerts)"}
+        if not configured:
+            return {"available": False, "reason": f"{env} not set"}
+        return {"available": True, "reason": None}
+
     return {
-        "in_app": {"available": True},
-        "telegram": {
-            "available": bool(cfg.telegram_enabled and s.telegram_bot_token and s.telegram_chat_id),
-            "reason": None
-            if cfg.telegram_enabled and s.telegram_bot_token
-            else "disabled or AEGIS_TELEGRAM_BOT_TOKEN / AEGIS_TELEGRAM_CHAT_ID not set",
-        },
-        "email": {
-            "available": bool(cfg.email_enabled and s.smtp_url and s.alert_email_to),
-            "reason": None
-            if cfg.email_enabled and s.smtp_url
-            else "disabled or AEGIS_SMTP_URL / AEGIS_ALERT_EMAIL_TO not set",
-        },
+        "in_app": {"available": True, "reason": None},
+        "telegram": status(
+            cfg.telegram_enabled,
+            bool(s.telegram_bot_token and s.telegram_chat_id),
+            "AEGIS_TELEGRAM_BOT_TOKEN / AEGIS_TELEGRAM_CHAT_ID",
+        ),
+        "email": status(
+            cfg.email_enabled,
+            bool(s.smtp_url and s.alert_email_to),
+            "AEGIS_SMTP_URL / AEGIS_ALERT_EMAIL_TO",
+        ),
         "min_severity_to_push": cfg.min_severity_to_push,
     }
 
@@ -113,28 +121,60 @@ def raise_alert(
     dedupe_key: str,
     link: str | None = None,
 ) -> Alert | None:
-    """Store an alert once per dedupe key (flush, caller commits) and push it
-    to configured channels if severe enough. Returns None for a duplicate."""
-    if db.scalar(select(Alert).where(Alert.dedupe_key == dedupe_key)) is not None:
+    """Store an alert once per dedupe key (flush, caller commits), then push
+    it to configured channels if severe enough. Returns None for a duplicate,
+    which is never pushed again."""
+    if severity not in SEVERITY:
+        raise ValueError(f"unknown alert severity {severity!r}")
+    key = dedupe_key[:200]
+    if db.scalar(select(Alert).where(Alert.dedupe_key == key)) is not None:
         return None
-    deliveries: dict[str, str] = {"in_app": "stored"}
-    if SEVERITY[severity] >= SEVERITY[get_config().alerts.min_severity_to_push]:
-        for ch in configured_channels():
-            try:
-                ch.send(title, body)
-                deliveries[ch.name] = "sent"
-            except Exception as exc:  # a push failure never loses the alert
-                log.warning("alert channel %s failed: %s", ch.name, exc.__class__.__name__)
-                deliveries[ch.name] = f"failed: {exc.__class__.__name__}"
     a = Alert(
         kind=kind,
         severity=severity,
         title=title[:200],
         body=body,
         link=link,
-        dedupe_key=dedupe_key[:200],
-        deliveries=deliveries,
+        dedupe_key=key,
+        deliveries={"in_app": "stored"},
     )
-    db.add(a)
-    db.flush()
+    try:
+        with db.begin_nested():  # a concurrent duplicate loses the race quietly
+            db.add(a)
+    except IntegrityError:
+        return None
+    if SEVERITY[severity] >= SEVERITY[get_config().alerts.min_severity_to_push]:
+        deliveries = dict(a.deliveries)
+        for ch in configured_channels():
+            try:
+                ch.send(a.title, body)
+                deliveries[ch.name] = "sent"
+            except Exception as exc:  # a push failure never loses the alert
+                log.warning("alert channel %s failed: %s", ch.name, exc.__class__.__name__)
+                deliveries[ch.name] = f"failed: {exc.__class__.__name__}"
+        a.deliveries = deliveries
+        db.flush()
     return a
+
+
+def alert_ingestion_failures(
+    db: Session, job: str, results: dict[str, str], day: date
+) -> Alert | None:
+    """One warning per job per day listing every item whose ingestion failed
+    (status failed/rejected or an exception). Caller commits."""
+    bad = {
+        k: v
+        for k, v in results.items()
+        if v in ("failed", "rejected") or v.startswith(("error", "failed"))
+    }
+    if not bad:
+        return None
+    listed = "; ".join(f"{k}: {v}" for k, v in sorted(bad.items()))
+    return raise_alert(
+        db,
+        kind="ingestion_failed",
+        severity="warning",
+        title=f"{job} ingestion failed for {len(bad)} of {len(results)}",
+        body=f"{listed[:1800]}. Affected data may be stale; gates will reject on freshness.",
+        dedupe_key=f"ingest:{job}:{day.isoformat()}",
+    )
