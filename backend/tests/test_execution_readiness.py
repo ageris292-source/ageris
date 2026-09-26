@@ -4,6 +4,7 @@ Property tests encode spec §72 invariants:
   * kill switch active  => no order may be permitted
   * any UNKNOWN          => no order may be permitted
   * mode != LIVE         => no live order may be permitted
+  * this build (no live broker adapter) => no live order, whatever else holds
 """
 
 from __future__ import annotations
@@ -46,8 +47,20 @@ def ks(active: bool) -> KillSwitchState:
 def test_live_permitted_iff_every_precondition_passes(
     mode: SystemMode, live_flag: bool, kill: bool, broker: Any, risk: Any
 ) -> None:
+    # The precondition logic, as it would apply to a build WITH a live adapter.
     r = evaluate_execution_readiness(
-        settings(mode, live_flag), ks(kill), broker_status=broker, risk_engine_status=risk
+        settings(mode, live_flag),
+        ks(kill),
+        broker_status=broker,
+        risk_engine_status=risk,
+        live_available=True,
+    )
+    # This build: never, whatever else is true.
+    assert (
+        evaluate_execution_readiness(
+            settings(mode, live_flag), ks(kill), broker_status=broker, risk_engine_status=risk
+        ).live_orders_permitted
+        is False
     )
     expected = (
         mode is SystemMode.LIVE and live_flag and not kill and broker == "PASS" and risk == "PASS"

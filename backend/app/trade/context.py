@@ -14,6 +14,7 @@ from sqlalchemy.orm import Session
 from app.analysis import risk as rk
 from app.core.config_file import get_config
 from app.core.settings import get_settings
+from app.live.broker import get_broker
 from app.market_data import service as md
 from app.market_data.types import InvalidTickerError, Ticker
 from app.models import AnalysisReport, Portfolio, Position, Stock
@@ -43,6 +44,8 @@ def build(
     cfg = get_config()
     s = get_settings()
     ks = read_kill_switch(db)
+    if broker_healthy is None:  # from the live adapter: always unknown in this build
+        broker_healthy = get_broker().status().healthy
     stock = _stock(db, p.ticker)
     pf = db.get(Portfolio, p.portfolio_id)
     ctx = GateContext(

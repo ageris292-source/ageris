@@ -15,7 +15,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.alerts.service import raise_alert
-from app.core.modes import SystemMode
+from app.core.modes import LIVE_TRADING_AVAILABLE, SystemMode
 from app.core.settings import Settings
 from app.models import RiskEvent, RiskEventSeverity, TradingControl, User, UserRole
 from app.services.audit import record_audit
@@ -172,13 +172,15 @@ def evaluate_execution_readiness(
     *,
     broker_status: CheckStatus = "UNKNOWN",
     risk_engine_status: CheckStatus = "UNKNOWN",
+    live_available: bool = LIVE_TRADING_AVAILABLE,
 ) -> ExecutionReadiness:
     """System-level preconditions for order submission.
 
     This is NOT the per-trade gate evaluation (that is the Trade Risk Engine,
     Phase 9). It answers only: "could any order be submitted at all right now?"
-    Broker and risk engine default to UNKNOWN because neither exists yet, which
-    keeps live AND paper execution blocked in this build.
+    Broker and risk engine default to UNKNOWN (fail closed). Live orders also
+    need `live_available`, the build-level switch, which is False in this
+    build: live orders are never permitted, whatever else is true.
     """
     mode = settings.system_mode
     checks = [
@@ -196,6 +198,13 @@ def evaluate_execution_readiness(
     paper_ok = mode is SystemMode.PAPER and all(c.status == "PASS" for c in checks)
 
     checks += [
+        ReadinessCheck(
+            "live_build",
+            "PASS" if live_available else "FAIL",
+            "live broker adapter available"
+            if live_available
+            else "live trading is not available in this build",
+        ),
         ReadinessCheck(
             "system_mode",
             "PASS" if mode is SystemMode.LIVE else "FAIL",

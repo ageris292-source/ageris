@@ -26,12 +26,14 @@ of profit.
 | 12 | Daily ranking through the engine, no-trade analytics, counterfactuals, alerts (in-app, Telegram, email) | **Done** ([report](docs/phase-12-report.md)) |
 | 13 | Model monitoring: PSI drift vs training data (null-calibrated), calibration decay on realised outcomes, auto-disable | **Done** ([report](docs/phase-13-report.md)) |
 | 14 | Security: global rate limits, request size limit, security headers, CORS fixes, production config checks; deployment (Caddy/TLS compose, runbook) | **Done** ([report](docs/phase-14-report.md), [deployment guide](docs/deployment.md)) |
-| 15 | Live-trading scaffolding (stays disabled) | In progress |
+| 15 | Live-trading scaffolding: broker adapter interface, disabled by a build switch; tests prove live orders cannot be placed | **Done** ([report](docs/phase-15-report.md)) |
 
 Market scope: **Indian equities only** (NSE `.NS`, BSE `.BO`).
 
-Live trading is **not available** in this build. Execution readiness reports
-`broker_health` as `UNKNOWN`, which blocks live orders by design. Every trade
+Live trading is **not available** in this build: a code-level switch
+(`LIVE_TRADING_AVAILABLE = False`) and the only broker adapter
+(`UnavailableBroker`) both refuse, so execution readiness reports `live_build`
+FAIL and `broker_health` UNKNOWN, and `POST /live/orders` always answers 503. Every trade
 proposal must pass all 24 gates of the deterministic Trade Risk Engine.
 
 ## Safety defaults
@@ -85,7 +87,7 @@ Redis DB 15):
 
 ```bash
 cd backend
-../.venv/bin/pytest            # 342 tests
+../.venv/bin/pytest            # 350 tests
 ../.venv/bin/ruff check . && ../.venv/bin/ruff format --check . && ../.venv/bin/mypy app
 ```
 
@@ -128,6 +130,8 @@ phase that first implements them, not as empty placeholders.
 | GET | `/alerts/channels` | user | In-app / Telegram / email availability |
 | POST | `/monitoring/run` | admin | Log predictions, check drift + calibration decay, retire a failing model |
 | GET | `/monitoring/overview`, `/monitoring/runs`, `/monitoring/runs/{id}` | admin | Latest check per model, history, full detail |
+| GET | `/live/status` | user | Why live trading is unavailable (build switch, adapter, readiness) |
+| POST | `/live/orders` | admin | Always refused (503) in this build; audited and alerted |
 
 Data from the Yahoo adapter is **unlicensed and research-only**; it is tagged as
 such on every stored bar.

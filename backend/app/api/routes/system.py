@@ -10,6 +10,7 @@ from app.core.config_file import get_config
 from app.core.rate_limit import redis_healthy
 from app.core.settings import get_settings
 from app.db.session import database_healthy
+from app.live.broker import get_broker, readiness_status
 from app.schemas import (
     ComponentHealth,
     HealthResponse,
@@ -59,7 +60,10 @@ def risk_status(db: DbSession, _user: CurrentUser) -> RiskStatusResponse:
     ks = read_kill_switch(db)
     engine_ok, _ = engine_self_test(cfg)
     readiness = evaluate_execution_readiness(
-        s, ks, risk_engine_status="PASS" if engine_ok else "FAIL"
+        s,
+        ks,
+        broker_status=readiness_status(get_broker()),
+        risk_engine_status="PASS" if engine_ok else "FAIL",
     )
     return RiskStatusResponse(
         generated_at=datetime.now(UTC),

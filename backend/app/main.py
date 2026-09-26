@@ -16,6 +16,7 @@ from app.api.routes import (
     auth,
     backtest,
     fundamentals,
+    live,
     macro,
     monitoring,
     news,
@@ -106,6 +107,7 @@ def create_app() -> FastAPI:
     app.include_router(paper.router)
     app.include_router(ranking.router)
     app.include_router(monitoring.router)
+    app.include_router(live.router)
     return app
 
 
