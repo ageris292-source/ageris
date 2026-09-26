@@ -317,6 +317,39 @@ class CostSchedule(_Strict):
     annual_financing_rate: Annotated[float, Field(ge=0.0, lt=1.0)]
 
 
+class RiskAnalysisRules(_Strict):
+    lookback_sessions: Annotated[int, Field(ge=60, le=2520)]
+    min_history_sessions: Annotated[int, Field(ge=30, le=2520)]
+    trading_days_per_year: Annotated[int, Field(ge=200, le=366)]
+    var_confidence: Annotated[list[Annotated[float, Field(gt=0.5, lt=1)]], Field(min_length=1)]
+    low_volatility: Annotated[float, Field(gt=0, lt=2)]
+    high_volatility: Annotated[float, Field(gt=0, lt=3)]
+    high_beta: Annotated[float, Field(gt=0, lt=5)]
+    low_beta: Annotated[float, Field(ge=0, lt=5)]
+    drawdown_warning: Annotated[float, Field(gt=0, lt=1)]
+    adv_window_sessions: Annotated[int, Field(ge=5, le=260)]
+    high_correlation: Annotated[float, Field(gt=0, lt=1)]
+    max_effective_positions_floor: Annotated[int, Field(ge=1, le=100)]
+    category_weights: dict[str, Annotated[float, Field(gt=0, le=1)]]
+    portfolio_fit_weights: dict[str, Annotated[float, Field(gt=0, le=1)]]
+
+    @model_validator(mode="after")
+    def _consistent(self) -> Self:
+        for name, w in (
+            ("category_weights", self.category_weights),
+            ("portfolio_fit_weights", self.portfolio_fit_weights),
+        ):
+            if abs(sum(w.values()) - 1) > 1e-6:
+                raise ValueError(f"risk_analysis.{name} must sum to 1")
+        if self.min_history_sessions > self.lookback_sessions:
+            raise ValueError("risk_analysis.min_history_sessions must be <= lookback_sessions")
+        if self.low_volatility >= self.high_volatility:
+            raise ValueError("risk_analysis.low_volatility must be below high_volatility")
+        if self.low_beta >= self.high_beta:
+            raise ValueError("risk_analysis.low_beta must be below high_beta")
+        return self
+
+
 class AegisConfig(_Strict):
     config_version: Annotated[str, Field(min_length=1)]
     trade_gates: TradeGateThresholds
@@ -331,6 +364,7 @@ class AegisConfig(_Strict):
     news: NewsRules
     macro: MacroRules
     valuation: ValuationRules
+    risk_analysis: RiskAnalysisRules
     transaction_costs: Annotated[dict[str, CostSchedule], Field(min_length=1)]
 
     def fingerprint(self) -> str:

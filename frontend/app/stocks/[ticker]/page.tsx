@@ -77,6 +77,21 @@ export default function StockPage() {
   const [val, setVal] = useState<Valuation | null>(null);
   const [macroOut, setMacroOut] = useState<AgentOutput | null>(null);
   const [vmBusy, setVmBusy] = useState(false);
+  const [riskOut, setRiskOut] = useState<AgentOutput | null>(null);
+  const [riskBusy, setRiskBusy] = useState(false);
+
+  const runRisk = useCallback(async () => {
+    setRiskBusy(true);
+    try {
+      const out = await guard((t) => api.riskAgent(t, ticker));
+      if (out) setRiskOut(out);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Risk analysis failed");
+    } finally {
+      setRiskBusy(false);
+    }
+  }, [guard, ticker]);
+
 
   const runValMacro = useCallback(async () => {
     setVmBusy(true);
@@ -108,6 +123,9 @@ export default function StockPage() {
   }, [token, loadDetail]);
 
   const end = detail?.latest_session ?? null;
+  useEffect(() => {
+    if (token && end) void runRisk();
+  }, [token, end, runRisk]);
   useEffect(() => {
     if (!token || !end) return;
     const days = RANGES.find((r) => r.key === range)!.days;
@@ -375,6 +393,15 @@ export default function StockPage() {
           >
             <NewsList items={news} />
           </TechnicalPanel>
+
+          <TechnicalPanel
+            title="Risk"
+            scoreLabel="Risk suitability (higher = lower risk)"
+            runLabel="Re-run"
+            out={riskOut}
+            busy={riskBusy}
+            onRun={runRisk}
+          />
 
           <TechnicalPanel
             title="Valuation"

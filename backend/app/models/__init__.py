@@ -135,6 +135,9 @@ from app.models.market import (  # noqa: E402
 # Phase 5 news + documents.
 from app.models.news import Document, DocumentChunk, NewsItem  # noqa: E402
 
+# Phase 7 portfolios.
+from app.models.portfolio import Portfolio, Position  # noqa: E402
+
 __all__ = [
     "AgentOutputRecord",
     "AgentRun",
@@ -147,6 +150,8 @@ __all__ = [
     "FinancialFact",
     "MacroObservation",
     "NewsItem",
+    "Portfolio",
+    "Position",
     "Price",
     "RiskEvent",
     "RiskEventSeverity",

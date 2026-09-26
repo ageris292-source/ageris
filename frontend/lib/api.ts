@@ -271,6 +271,58 @@ export interface Regime {
   evidence: Record<string, number | null>;
 }
 
+export interface PortfolioSummary {
+  id: number;
+  name: string;
+  kind: "model" | "paper";
+  currency: string;
+  cash: string;
+  starting_cash: string;
+  positions: { ticker: string; quantity: number; avg_cost: string }[];
+}
+
+export interface PortfolioCheck {
+  name: string;
+  kind: "limit" | "advisory";
+  status: GateStatus;
+  value: number | null;
+  limit: number | null;
+  reason: string;
+  offenders: string[];
+}
+
+export interface PortfolioAnalysis {
+  portfolio: { id: number; name: string; kind: string; currency: string };
+  as_of: string;
+  limits_status: GateStatus;
+  holdings: {
+    ticker: string;
+    quantity: number;
+    avg_cost: number | null;
+    price: number | null;
+    price_date: string | null;
+    value: number | null;
+    weight: number;
+    sector: string;
+    unrealised_pnl: number | null;
+    adtv: number | null;
+    candidate: boolean;
+  }[];
+  sector_weights: Record<string, number>;
+  checks: PortfolioCheck[];
+  metrics: Record<string, number | null>;
+  correlation: Record<string, Record<string, number>>;
+  high_correlation_pairs: { a: string; b: string; correlation: number }[];
+  candidate: { ticker: string; weight: number; price: number | null; quantity: number; value: number | null } | null;
+  common_sessions: number;
+  warnings: string[];
+}
+
+export interface PortfolioFit {
+  analysis: AgentOutput;
+  details: { before: PortfolioAnalysis; after: PortfolioAnalysis };
+}
+
 export class ApiError extends Error {
   constructor(public status: number, message: string) {
     super(message);
@@ -359,4 +411,25 @@ export const api = {
   valuation: (token: string, ticker: string) =>
     request<Valuation>(`/valuation/${encodeURIComponent(ticker)}`, {}, token),
   regime: (token: string) => request<Regime>("/regime", {}, token),
+  riskAgent: (token: string, ticker: string) =>
+    request<AgentOutput>(`/risk-agent/${encodeURIComponent(ticker)}`, {}, token),
+  portfolios: (token: string) => request<PortfolioSummary[]>("/portfolios", {}, token),
+  createPortfolio: (token: string, name: string, cash: string) =>
+    request<PortfolioSummary>("/portfolios", json({ name, cash, kind: "model" }), token),
+  setPosition: (token: string, id: number, ticker: string, quantity: number, avg_cost: string) =>
+    request<PortfolioSummary>(
+      `/portfolios/${id}/positions`,
+      { ...json({ ticker, quantity, avg_cost }), method: "PUT" },
+      token,
+    ),
+  setCash: (token: string, id: number, cash: string) =>
+    request<PortfolioSummary>(`/portfolios/${id}/cash`, { ...json({ cash }), method: "PUT" }, token),
+  portfolioAnalysis: (token: string, id: number) =>
+    request<PortfolioAnalysis>(`/portfolios/${id}/analysis`, {}, token),
+  portfolioFit: (token: string, id: number, ticker: string, weight: number) =>
+    request<PortfolioFit>(
+      `/portfolio-agent/${id}/${encodeURIComponent(ticker)}?weight=${weight}`,
+      {},
+      token,
+    ),
 };

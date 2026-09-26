@@ -5,7 +5,7 @@
 # being relied on (spec §26, §73). The file is validated strictly at startup:
 # unknown keys, out-of-range values and inconsistent limits abort boot.
 
-config_version: "2026.09.6"
+config_version: "2026.09.7"
 
 trade_gates:
   minimum_expected_net_return: 0.05      # 5% net of all modelled costs
@@ -123,6 +123,8 @@ fundamentals:
   peer_groups:                           # optional peer lists for relative comparison
     IT_SERVICES: [TCS.NS, INFY.NS, WIPRO.NS, HCLTECH.NS, TECHM.NS]
     PRIVATE_BANKS: [HDFCBANK.NS, ICICIBANK.NS, KOTAKBANK.NS, AXISBANK.NS]
+    OIL_GAS_UPSTREAM: [ONGC.NS, OIL.NS]
+    REFINING_MARKETING: [RELIANCE.NS, BPCL.NS, IOC.NS, HINDPETRO.NS]
   # Lenders: industrial leverage / cash-flow ratios do not apply and are skipped.
   financial_sector_groups: [PRIVATE_BANKS]
   min_growth_for_peg: 0.05               # PEG is meaningless on near-zero growth
@@ -188,6 +190,8 @@ macro:
   sector_sensitivities:
     IT_SERVICES: {usd_inr: 1.0, nifty_it: 1.0, repo_rate: -0.2, nifty50: 0.5}
     PRIVATE_BANKS: {nifty_bank: 1.0, repo_rate: -0.5, gdp_growth: 1.0, nifty50: 0.5}
+    OIL_GAS_UPSTREAM: {brent: 1.0, usd_inr: 0.3, nifty50: 0.5}
+    REFINING_MARKETING: {brent: -0.5, usd_inr: -0.3, nifty50: 0.5}
   default_sensitivities: {nifty50: 1.0}
 
 # Valuation agent (Phase 6). Rates are ASSUMPTIONS to review regularly.
@@ -203,6 +207,33 @@ valuation:
   beta_lookback_weeks: 104
   beta_bounds: [0.3, 2.5]
   mos_scale: 0.30                        # score = 50 + 50 * tanh(margin_of_safety / scale)
+
+# Risk agent + portfolio analytics (Phase 7). Descriptive thresholds for
+# scoring; the hard limits live in risk_controls / liquidity above.
+risk_analysis:
+  lookback_sessions: 252                 # ~1 trading year of daily returns
+  min_history_sessions: 120
+  trading_days_per_year: 252
+  var_confidence: [0.95, 0.99]           # historical (non-parametric) VaR / CVaR
+  low_volatility: 0.20                   # annualised
+  high_volatility: 0.40
+  high_beta: 1.30
+  low_beta: 0.80
+  drawdown_warning: 0.30                 # peak-to-trough over the lookback
+  adv_window_sessions: 20
+  high_correlation: 0.70                 # pairwise, flagged in portfolios
+  max_effective_positions_floor: 5       # 1/HHI below this => concentrated
+  category_weights:
+    volatility: 0.25
+    drawdown: 0.20
+    market: 0.15
+    return_quality: 0.15
+    liquidity: 0.25
+  portfolio_fit_weights:                 # Portfolio agent: fit of a candidate in a portfolio
+    limits: 0.40
+    diversification: 0.30
+    volatility: 0.20
+    sector: 0.10
 
 # Transaction-cost schedules, expressed in basis points of traded value.
 # The example NSE schedule below MUST be checked against the current
