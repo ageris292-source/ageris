@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { api, ApiError, type GateStatus, type Health, type Me, type RiskStatus } from "@/lib/api";
+import { api, ApiError, type GateStatus, type Health, type Me, type Regime, type RiskStatus } from "@/lib/api";
 import { readToken, writeToken } from "@/lib/auth";
 import { Login } from "@/components/Login";
 import { Nav } from "@/components/Nav";
@@ -83,6 +83,7 @@ export default function Dashboard() {
   const [health, setHealth] = useState<Health | null>(null);
   const [me, setMe] = useState<Me | null>(null);
   const [risk, setRisk] = useState<RiskStatus | null>(null);
+  const [regime, setRegime] = useState<Regime | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -111,6 +112,7 @@ export default function Dashboard() {
       const [m, r] = await Promise.all([api.me(token), api.riskStatus(token)]);
       setMe(m);
       setRisk(r);
+      api.regime(token).then(setRegime).catch(() => setRegime(null));
     } catch (err) {
       if (err instanceof ApiError && err.status === 401) signOut();
       else setError(err instanceof Error ? err.message : "Request failed");
@@ -186,6 +188,36 @@ export default function Dashboard() {
 
         {risk && me && <KillSwitchControl token={token} me={me} status={risk} onChange={load} />}
 
+        <Panel title="Market regime">
+          {regime ? (
+            <>
+              <p
+                className={`mb-1 text-lg font-semibold ${
+                  !regime.known ? "text-unknown" : regime.risk === "risk_off" ? "text-fail" : regime.risk === "risk_on" ? "text-pass" : ""
+                }`}
+              >
+                {regime.label.replaceAll("_", " ")}
+              </p>
+              <p className="mb-3 text-sm text-muted">
+                Trend {regime.trend} · volatility {regime.volatility} · {regime.risk.replace("_", "-")}
+              </p>
+              <dl className="grid grid-cols-2 gap-y-1 text-xs">
+                {Object.entries(regime.evidence).map(([k, v]) => (
+                  <div key={k} className="contents">
+                    <dt className="text-muted">{k.replaceAll("_", " ")}</dt>
+                    <dd className="font-mono">{v === null ? "—" : v.toFixed(4)}</dd>
+                  </div>
+                ))}
+              </dl>
+              {!regime.known && (
+                <p className="mt-2 text-xs text-unknown">Regime unknown: macro series not ingested yet (admin: POST /macro/ingest).</p>
+              )}
+            </>
+          ) : (
+            <p className="text-sm text-muted">Loading…</p>
+          )}
+        </Panel>
+
         <Panel title="Infrastructure">
           {health ? (
             <ul className="space-y-1 text-sm">
@@ -221,8 +253,8 @@ export default function Dashboard() {
             </dl>
           )}
           <p className="mt-4 text-xs text-muted">
-            Market data lives under Stocks. Research agents and rankings arrive in later
-            phases. Nothing on this page is a trade signal.
+            Market data lives under Stocks. Agent analyses are on each stock page; rankings arrive in a later
+            phase. Nothing on this page is a trade signal.
           </p>
         </Panel>
       </div>

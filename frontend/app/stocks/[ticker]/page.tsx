@@ -7,15 +7,23 @@ import { Login } from "@/components/Login";
 import { Nav } from "@/components/Nav";
 import { PriceChart } from "@/components/PriceChart";
 import { FreshnessBadge, QualityBadge } from "@/components/StatusBadge";
+import { FinancialsTable } from "@/components/FinancialsTable";
+import { NewsList } from "@/components/NewsList";
 import { TechnicalPanel } from "@/components/TechnicalPanel";
+import { ValuationDetails } from "@/components/ValuationDetails";
+import { ReportPanel } from "@/components/ReportPanel";
 import { useSession } from "@/components/useSession";
 import {
   api,
   type AgentOutput,
+  type Financials,
+  type NewsItem,
   type Basis,
   type IndicatorSeries,
   type PriceSeries,
   type StockDetail,
+  type Valuation,
+  type AnalysisReport,
 } from "@/lib/api";
 
 const RANGES = [
@@ -62,6 +70,79 @@ export default function StockPage() {
   const [tech, setTech] = useState<AgentOutput | null>(null);
   const [techBusy, setTechBusy] = useState(false);
   const [indicators, setIndicators] = useState<IndicatorSeries | null>(null);
+  const [fund, setFund] = useState<AgentOutput | null>(null);
+  const [fin, setFin] = useState<Financials | null>(null);
+  const [fundBusy, setFundBusy] = useState(false);
+  const [newsOut, setNewsOut] = useState<AgentOutput | null>(null);
+  const [news, setNews] = useState<NewsItem[] | null>(null);
+  const [newsBusy, setNewsBusy] = useState(false);
+  const [val, setVal] = useState<Valuation | null>(null);
+  const [macroOut, setMacroOut] = useState<AgentOutput | null>(null);
+  const [vmBusy, setVmBusy] = useState(false);
+  const [report, setReport] = useState<AnalysisReport | null>(null);
+  const [reportBusy, setReportBusy] = useState(false);
+  const [riskOut, setRiskOut] = useState<AgentOutput | null>(null);
+  const [riskBusy, setRiskBusy] = useState(false);
+
+  useEffect(() => {
+    if (!token) return;
+    guard((t) => api.latestAnalysis(t, ticker))
+      .then((r) => r && setReport(r))
+      .catch(() => setReport(null)); // 404 = no report yet
+  }, [token, guard, ticker]);
+
+  const runReport = useCallback(async () => {
+    setReportBusy(true);
+    try {
+      const r = await guard((t) => api.runAnalysis(t, ticker));
+      if (r) setReport(r);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Analysis failed");
+    } finally {
+      setReportBusy(false);
+    }
+  }, [guard, ticker]);
+
+  const downloadReport = useCallback(async () => {
+    if (!report) return;
+    const md = await guard((t) => api.reportMarkdown(t, report.report_id));
+    if (!md) return;
+    const url = URL.createObjectURL(new Blob([md], { type: "text/markdown" }));
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `aegis-${ticker}-report-${report.report_id}.md`;
+    a.click();
+    URL.revokeObjectURL(url);
+  }, [guard, report, ticker]);
+
+  const runRisk = useCallback(async () => {
+    setRiskBusy(true);
+    try {
+      const out = await guard((t) => api.riskAgent(t, ticker));
+      if (out) setRiskOut(out);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Risk analysis failed");
+    } finally {
+      setRiskBusy(false);
+    }
+  }, [guard, ticker]);
+
+
+  const runValMacro = useCallback(async () => {
+    setVmBusy(true);
+    try {
+      const [v, m] = await Promise.all([
+        guard((t) => api.valuation(t, ticker)),
+        guard((t) => api.macroAgent(t, ticker)),
+      ]);
+      if (v) setVal(v);
+      if (m) setMacroOut(m);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Valuation / macro analysis failed");
+    } finally {
+      setVmBusy(false);
+    }
+  }, [guard, ticker]);
 
   const loadDetail = useCallback(async () => {
     try {
@@ -77,6 +158,9 @@ export default function StockPage() {
   }, [token, loadDetail]);
 
   const end = detail?.latest_session ?? null;
+  useEffect(() => {
+    if (token && end) void runRisk();
+  }, [token, end, runRisk]);
   useEffect(() => {
     if (!token || !end) return;
     const days = RANGES.find((r) => r.key === range)!.days;
@@ -104,6 +188,64 @@ export default function StockPage() {
   useEffect(() => {
     if (token && end) void runTechnical();
   }, [token, end, runTechnical]);
+
+  const runFundamental = useCallback(
+    async (fetchFirst: boolean) => {
+      setFundBusy(true);
+      try {
+        if (fetchFirst) {
+          const run = await guard((t) => api.ingestFinancials(t, ticker));
+          if (run && run.status === "failed") setError(`Financials fetch failed: ${run.error}`);
+        }
+        const [f, out] = await Promise.all([
+          guard((t) => api.financials(t, ticker)),
+          guard((t) => api.fundamental(t, ticker)),
+        ]);
+        if (f) setFin(f);
+        if (out) setFund(out);
+      } catch (err) {
+        setError(err instanceof Error ? err.message : "Fundamental analysis failed");
+      } finally {
+        setFundBusy(false);
+      }
+    },
+    [guard, ticker],
+  );
+
+  const runNews = useCallback(
+    async (fetchFirst: boolean) => {
+      setNewsBusy(true);
+      try {
+        if (fetchFirst) {
+          const run = await guard((t) => api.ingestNews(t, ticker));
+          if (run && run.status === "failed") setError(`News fetch failed: ${run.error}`);
+        }
+        const [items, out] = await Promise.all([
+          guard((t) => api.news(t, ticker)),
+          guard((t) => api.newsAgent(t, ticker)),
+        ]);
+        if (items) setNews(items);
+        if (out) setNewsOut(out);
+      } catch (err) {
+        setError(err instanceof Error ? err.message : "News analysis failed");
+      } finally {
+        setNewsBusy(false);
+      }
+    },
+    [guard, ticker],
+  );
+
+  useEffect(() => {
+    if (token && detail) void runNews(false);
+  }, [token, detail?.ticker, runNews]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  useEffect(() => {
+    if (token && detail) void runValMacro();
+  }, [token, detail?.ticker, runValMacro]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  useEffect(() => {
+    if (token && detail) void runFundamental(false);
+  }, [token, detail?.ticker, runFundamental]); // eslint-disable-line react-hooks/exhaustive-deps
 
   async function refresh() {
     setBusy(true);
@@ -183,6 +325,8 @@ export default function StockPage() {
               {detail.licensing_notice}
             </div>
           )}
+
+          <ReportPanel report={report} busy={reportBusy} onRun={runReport} onDownload={downloadReport} />
 
           <section className="mb-4 rounded-lg border border-line bg-panel p-5">
             <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
@@ -264,6 +408,57 @@ export default function StockPage() {
           </section>
 
           <TechnicalPanel out={tech} busy={techBusy} onRun={runTechnical} />
+
+          <TechnicalPanel
+            title="Fundamental analysis"
+            scoreLabel="Fundamental score"
+            runLabel="Fetch financials & re-run"
+            out={fund}
+            busy={fundBusy}
+            onRun={() => runFundamental(true)}
+          >
+            <FinancialsTable data={fin} />
+          </TechnicalPanel>
+
+          <TechnicalPanel
+            title="News"
+            scoreLabel="News sentiment"
+            runLabel="Fetch news & re-run"
+            out={newsOut}
+            busy={newsBusy}
+            onRun={() => runNews(true)}
+          >
+            <NewsList items={news} />
+          </TechnicalPanel>
+
+          <TechnicalPanel
+            title="Risk"
+            scoreLabel="Risk suitability (higher = lower risk)"
+            runLabel="Re-run"
+            out={riskOut}
+            busy={riskBusy}
+            onRun={runRisk}
+          />
+
+          <TechnicalPanel
+            title="Valuation"
+            scoreLabel="Valuation score"
+            runLabel="Re-run"
+            out={val?.analysis ?? null}
+            busy={vmBusy}
+            onRun={runValMacro}
+          >
+            <ValuationDetails d={val?.details ?? null} />
+          </TechnicalPanel>
+
+          <TechnicalPanel
+            title="Macro & regime"
+            scoreLabel="Macro fit"
+            runLabel="Re-run"
+            out={macroOut}
+            busy={vmBusy}
+            onRun={runValMacro}
+          />
 
           <div className="grid gap-4 md:grid-cols-2">
             <Panel title="Data quality">

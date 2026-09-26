@@ -1,0 +1,14 @@
+# TLS termination and reverse proxy (Phase 14). Certificates are obtained
+# automatically for both host names (they must resolve to this machine).
+{$AEGIS_UI_HOST} {
+	encode zstd gzip
+	reverse_proxy frontend:3000
+}
+
+{$AEGIS_API_HOST} {
+	encode zstd gzip
+	request_body {
+		max_size 6MB
+	}
+	reverse_proxy backend:8000
+}

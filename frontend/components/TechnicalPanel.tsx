@@ -23,25 +23,35 @@ export function TechnicalPanel({
   out,
   busy,
   onRun,
+  title = "Technical analysis",
+  scoreLabel = "Technical score",
+  runLabel = "Re-run",
+  children,
 }: {
   out: AgentOutput | null;
   busy: boolean;
   onRun: () => void;
+  title?: string;
+  scoreLabel?: string;
+  runLabel?: string;
+  children?: React.ReactNode;
 }) {
   return (
     <section className="mb-4 rounded-lg border border-line bg-panel p-5">
       <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
         <h3 className="text-xs font-semibold uppercase tracking-wider text-muted">
-          Technical analysis
+          {title}
         </h3>
         <button
           className="rounded border border-line px-2.5 py-1 text-xs disabled:opacity-40"
           onClick={onRun}
           disabled={busy}
         >
-          {busy ? "Analysing…" : "Re-run"}
+          {busy ? "Working…" : runLabel}
         </button>
       </div>
+
+      {children}
 
       {!out && <p className="text-sm text-muted">{busy ? "Running…" : "Not run yet."}</p>}
 
@@ -61,7 +71,7 @@ export function TechnicalPanel({
         <>
           <div className="mb-4 grid gap-4 sm:grid-cols-3">
             <div>
-              <div className="text-xs text-muted">Technical score</div>
+              <div className="text-xs text-muted">{scoreLabel}</div>
               <div className="font-mono text-3xl">{out.score.toFixed(0)}<span className="text-base text-muted">/100</span></div>
               <div className={`text-sm ${tilt(out.score).cls}`}>{tilt(out.score).word}</div>
             </div>

@@ -5,7 +5,7 @@
 # being relied on (spec §26, §73). The file is validated strictly at startup:
 # unknown keys, out-of-range values and inconsistent limits abort boot.
 
-config_version: "2026.09.3"
+config_version: "2026.09.12"
 
 trade_gates:
   minimum_expected_net_return: 0.05      # 5% net of all modelled costs
@@ -101,6 +101,249 @@ technical:
     breakout: 0.15
     volume: 0.10
     mean_reversion: 0.10
+
+# Fundamental analysis agent (Phase 4).
+fundamentals:
+  # When a source does not state when figures were published, availability is
+  # ESTIMATED from SEBI LODR filing deadlines (Reg. 33: quarterly results within
+  # 45 days of quarter end; audited annual results within 60 days of year end).
+  # Estimated availability is never used for historical backtests.
+  quarterly_publication_lag_days: 45
+  annual_publication_lag_days: 60
+  min_annual_periods: 2
+  margin_deterioration_pts: 0.02         # operating margin down >= 2 percentage points
+  weak_cash_conversion: 0.80             # FCF / net income below this
+  max_debt_to_equity: 1.0
+  min_interest_coverage: 3.0
+  strong_growth: 0.15
+  high_roe: 0.15
+  high_roce: 0.15
+  expensive_pe: 40
+  cheap_pe: 12
+  peer_groups:                           # optional peer lists for relative comparison
+    IT_SERVICES: [TCS.NS, INFY.NS, WIPRO.NS, HCLTECH.NS, TECHM.NS]
+    PRIVATE_BANKS: [HDFCBANK.NS, ICICIBANK.NS, KOTAKBANK.NS, AXISBANK.NS]
+    OIL_GAS_UPSTREAM: [ONGC.NS, OIL.NS]
+    REFINING_MARKETING: [RELIANCE.NS, BPCL.NS, IOC.NS, HINDPETRO.NS]
+  # Lenders: industrial leverage / cash-flow ratios do not apply and are skipped.
+  financial_sector_groups: [PRIVATE_BANKS]
+  min_growth_for_peg: 0.05               # PEG is meaningless on near-zero growth
+  category_weights:
+    growth: 0.25
+    profitability: 0.25
+    balance_sheet: 0.20
+    cash_quality: 0.15
+    valuation: 0.15
+
+# News agent + document retrieval (Phase 5).
+news:
+  provider_enabled: true                 # Google News RSS search (unlicensed, headlines only)
+  max_items_per_fetch: 60
+  sentiment_model: ProsusAI/finbert
+  embedding_model: sentence-transformers/all-MiniLM-L6-v2
+  embedding_dim: 384
+  duplicate_similarity: 0.90             # cosine similarity above which two headlines are the same story
+  duplicate_window_hours: 72
+  lookback_days: 30                      # news older than this at as_of is ignored by the agent
+  recency_half_life_days: 5
+  min_items_for_score: 3
+  contradiction_window_days: 7
+  chunk_chars: 1200
+  chunk_overlap: 200
+  retrieval_top_k: 5
+  importance:                            # relative weight of an event type in the news score
+    earnings_beat: 1.0
+    earnings_miss: 1.0
+    results: 0.8
+    regulatory: 0.9
+    lawsuit: 0.8
+    acquisition: 0.8
+    management_change: 0.7
+    dividend_buyback: 0.5
+    product_launch: 0.5
+    rating_change: 0.6
+    sector: 0.4
+    other: 0.3
+
+# Macro agent + market regime (Phase 6).
+macro:
+  world_bank_indicators:                 # official, CC BY 4.0 (licensed with attribution)
+    cpi_inflation: FP.CPI.TOTL.ZG
+    gdp_growth: NY.GDP.MKTP.KD.ZG
+    usd_inr_annual: PA.NUS.FCRF
+  world_bank_publication_lag_days: 180   # annual figures assumed public ~6 months after year end
+  market_series:                         # Yahoo chart symbols (unlicensed)
+    nifty50: "^NSEI"
+    india_vix: "^INDIAVIX"
+    usd_inr: "USDINR=X"
+    brent: "BZ=F"
+    nifty_it: "^CNXIT"
+    nifty_bank: "^NSEBANK"
+  benchmark: nifty50
+  history_days: 1900                     # ~5 years: long enough for walk-forward model training
+  rbi_inflation_target: 0.04
+  change_window_sessions: 63             # ~3 months
+  vix_high: 20
+  vix_low: 13
+  trend_band: 0.02                       # |NIFTY / 200d avg - 1| below this => sideways
+  # How a sector tends to respond to a RISE in each driver (+1 benefits, -1 hurts).
+  sector_sensitivities:
+    IT_SERVICES: {usd_inr: 1.0, nifty_it: 1.0, repo_rate: -0.2, nifty50: 0.5}
+    PRIVATE_BANKS: {nifty_bank: 1.0, repo_rate: -0.5, gdp_growth: 1.0, nifty50: 0.5}
+    OIL_GAS_UPSTREAM: {brent: 1.0, usd_inr: 0.3, nifty50: 0.5}
+    REFINING_MARKETING: {brent: -0.5, usd_inr: -0.3, nifty50: 0.5}
+  default_sensitivities: {nifty50: 1.0}
+
+# Valuation agent (Phase 6). Rates are ASSUMPTIONS to review regularly.
+valuation:
+  risk_free_rate: 0.065                  # India 10Y G-sec yield — manual assumption, verify
+  equity_risk_premium: 0.07
+  projection_years: 5
+  terminal_growth: {bear: 0.04, base: 0.05, bull: 0.06}
+  growth_spread: 0.04                    # bull/bear revenue growth = base +/- spread
+  wacc_spread: 0.01                      # bear WACC +1pt, bull -1pt
+  min_growth: -0.05
+  max_growth: 0.25
+  beta_lookback_weeks: 104
+  beta_bounds: [0.3, 2.5]
+  mos_scale: 0.30                        # score = 50 + 50 * tanh(margin_of_safety / scale)
+
+# Risk agent + portfolio analytics (Phase 7). Descriptive thresholds for
+# scoring; the hard limits live in risk_controls / liquidity above.
+risk_analysis:
+  lookback_sessions: 252                 # ~1 trading year of daily returns
+  min_history_sessions: 120
+  trading_days_per_year: 252
+  var_confidence: [0.95, 0.99]           # historical (non-parametric) VaR / CVaR
+  low_volatility: 0.20                   # annualised
+  high_volatility: 0.40
+  high_beta: 1.30
+  low_beta: 0.80
+  drawdown_warning: 0.30                 # peak-to-trough over the lookback
+  adv_window_sessions: 20
+  high_correlation: 0.70                 # pairwise, flagged in portfolios
+  max_effective_positions_floor: 5       # 1/HHI below this => concentrated
+  category_weights:
+    volatility: 0.25
+    drawdown: 0.20
+    market: 0.15
+    return_quality: 0.15
+    liquidity: 0.25
+  portfolio_fit_weights:                 # Portfolio agent: fit of a candidate in a portfolio
+    limits: 0.40
+    diversification: 0.30
+    volatility: 0.20
+    sector: 0.10
+
+# Orchestrator + bull/bear synthesis (Phase 8). The research stance is a
+# weighted summary of agent scores; it is NOT a trade decision. Only the
+# deterministic Trade Risk Engine (Phase 9) can approve a trade proposal.
+orchestrator:
+  agent_weights:
+    technical: 0.20
+    fundamental: 0.20
+    valuation: 0.15
+    risk: 0.20
+    news: 0.10
+    macro: 0.10
+    portfolio: 0.05
+  required_agents: [risk]                # stance is INSUFFICIENT without these
+  min_agents_ok: 4
+  stance_band: 10                        # score >= 50+band positive tilt, <= 50-band negative
+  conflict_gap: 25                       # two agents this far apart on either side of 50 conflict
+  max_case_points: 6                     # bull / bear points listed per side
+  conflict_confidence_penalty: 0.15      # per conflict, multiplicative
+
+# Trade Risk Engine (Phase 9). Deterministic gates evaluated in a fixed order;
+# a proposal is APPROVED only if every applicable gate is PASS. UNKNOWN fails.
+trade_engine:
+  cost_schedule: NSE_EQ_DELIVERY
+  max_report_age_hours: 24               # the research report must be this recent
+  required_stance: POSITIVE_TILT
+  max_agent_conflicts: 0
+  benchmark_expected_annual_return: 0.12 # NIFTY 50 long-run assumption for the edge gate
+  min_holding_days: 5                    # trading days
+  max_holding_days: 250
+  max_order_value_fraction: 0.10         # of equity, before the sizing gate
+
+# Paper trading (Phase 11). Orders need an APPROVED decision, a human
+# approver with this role, an idempotency key and a passing re-check.
+paper_trading:
+  approver_role: admin
+  max_decision_age_minutes: 60           # older approvals must be re-proposed
+  fill_model: reference_close_plus_costs # adverse slippage + half spread + impact
+
+# Daily ranking, no-trade analytics and alerts (Phase 12). A stock is a
+# QUALIFIED opportunity only if every opportunity gate of the Trade Risk
+# Engine passes for a standardised candidate trade. Operational gates (kill
+# switch, mode, portfolio kind) and the live-quote spread gate are reported
+# separately: they block orders, not the quality of an opportunity.
+ranking:
+  horizon: 20                            # trading days (must have a model horizon)
+  stop_atr_multiple: 2.0                 # standard stop = entry - k x ATR(14) ...
+  min_stop_fraction: 0.03                # ... but at least this far below entry
+  target_reward_multiple: 2.5            # standard target = entry + m x stop distance
+  refresh_reports: true                  # re-run the orchestrator for stale reports
+  top_n: 10
+alerts:
+  telegram_enabled: false                # needs AEGIS_TELEGRAM_BOT_TOKEN + AEGIS_TELEGRAM_CHAT_ID
+  email_enabled: false                   # needs AEGIS_SMTP_URL + AEGIS_ALERT_EMAIL_TO
+  min_severity_to_push: warning          # info | warning | critical
+
+# Model monitoring (Phase 13). Each active model is checked daily against
+# its own training data (feature drift, PSI) and against realised outcomes
+# of its own logged predictions (calibration decay). A FAIL retires the
+# model (auto_disable) and raises a critical alert; the engine then has no
+# probability source for that horizon, so every entry is rejected.
+monitoring:
+  psi_bins: 10                           # training-decile bins per feature
+  # A feature drifts only when its PSI exceeds BOTH the absolute threshold and
+  # the 95th/99th percentile of PSI seen in the model's own training history
+  # for windows of the same length (autocorrelated features vary a lot).
+  psi_warn: 0.10                         # floor for WARN (moderate shift)
+  psi_fail: 0.25                         # floor for FAIL (major shift)
+  min_drifted_features_to_fail: 3        # FAIL when this many features drift
+  drift_window_sessions: 60              # recent sessions pooled across the universe
+  min_drift_samples: 100                 # fewer current rows -> drift UNKNOWN
+  calibration_window_predictions: 1000   # newest matured predictions evaluated
+  min_matured_predictions: 100           # fewer -> calibration UNKNOWN (awaiting outcomes)
+  max_live_calibration_error: 0.08       # live ECE of P(profit) above this -> FAIL
+  max_calibration_decay: 0.05            # live ECE - backtest ECE above this -> FAIL
+  auto_disable: true                     # retire the model on FAIL
+
+# HTTP hardening (Phase 14). Limits are per client: the socket peer, or the
+# X-Forwarded-For entry appended by a trusted reverse proxy (the number of
+# proxy hops is deployment topology: AEGIS_TRUSTED_PROXY_HOPS). The limiter
+# fails closed: if Redis is down, requests are refused (503), except health.
+security:
+  rate_limit_window_seconds: 60
+  rate_limit_requests: 300               # every request
+  rate_limit_writes: 60                  # POST/PUT/DELETE (analysis, backtests, orders...)
+  rate_limit_exempt_paths: ["/health"]
+  max_request_bytes: 6291456             # 6 MiB (CSV imports are capped at 5 MiB)
+  hsts_max_age_seconds: 31536000         # sent in production only (TLS terminated upstream)
+
+# Walk-forward backtesting and the probability model (Phase 10).
+# Horizons are in trading days. Labels start at the NEXT session's close
+# (a signal at close t can only be traded after t), so no same-bar fills.
+backtest:
+  horizons: [20]
+  min_train_sessions: 504                # ~2 years of history before the first test fold
+  test_fold_sessions: 63                 # one quarter per walk-forward fold
+  embargo_sessions: 5                    # extra gap after purging overlapping labels
+  calibration_fraction: 0.25             # last share (by time) of each training window -> isotonic fit
+  calibration_bins: 10                   # expected calibration error bins
+  min_train_samples: 800
+  seed: 42
+  top_k: 3                               # simulated portfolio: at most k names per rebalance
+  lightgbm:
+    n_estimators: 200
+    learning_rate: 0.03
+    num_leaves: 15
+    min_child_samples: 50
+    subsample: 0.8
+    colsample_bytree: 0.8
+    reg_lambda: 1.0
 
 # Transaction-cost schedules, expressed in basis points of traded value.
 # The example NSE schedule below MUST be checked against the current
