@@ -367,6 +367,67 @@ export interface AnalysisReport {
   narrative: { text: string; source: string; warnings: string[] };
 }
 
+export type TradeGateStatus = GateStatus | "NOT_APPLICABLE";
+
+export interface TradeGate {
+  order: number;
+  name: string;
+  status: TradeGateStatus;
+  value: number | string | null;
+  threshold: number | string | null;
+  reason: string;
+}
+
+export interface TradeProposalIn {
+  ticker: string;
+  side: "buy" | "sell";
+  quantity: number;
+  entry_price: string;
+  stop_loss: string | null;
+  target: string | null;
+  horizon_days: number;
+  portfolio_id: number;
+  mode: "paper" | "live";
+  quoted_spread_bps: number | null;
+  rationale?: string;
+}
+
+export interface TradeDecision {
+  proposal_id: number;
+  decision_id: number;
+  decision: "APPROVED" | "REJECTED";
+  engine_version: string;
+  evaluated_at: string;
+  gates: TradeGate[];
+  failed_gates: string[];
+  first_failure: string | null;
+  requires_human_approval: boolean;
+  costs: { round_trip_fraction: number; buy_bps: number; sell_bps: number; participation_pct_of_adv: number | null } | null;
+  metrics: Record<string, number | null>;
+  decision_hash: string;
+}
+
+export interface GateCatalog {
+  engine_version: string;
+  self_test: { passed: boolean; detail: string };
+  rule: string;
+  gates: { order: number; name: string; applies_to_exits: boolean; description: string }[];
+}
+
+export interface ProposalRow {
+  proposal_id: number;
+  decision_id: number;
+  created_at: string;
+  ticker: string;
+  side: string;
+  mode: string;
+  quantity: number;
+  entry_price: string;
+  portfolio_id: number;
+  decision: "APPROVED" | "REJECTED";
+  first_failure: string | null;
+}
+
 export class ApiError extends Error {
   constructor(public status: number, message: string) {
     super(message);
@@ -469,6 +530,11 @@ export const api = {
   latestAnalysis: (token: string, ticker: string) =>
     request<AnalysisReport>(`/analysis/${encodeURIComponent(ticker)}/latest`, {}, token),
   reportMarkdown: (token: string, id: number) => requestText(`/reports/${id}/markdown`, token),
+  tradeGates: (token: string) => request<GateCatalog>("/trade/gates", {}, token),
+  submitProposal: (token: string, body: TradeProposalIn) =>
+    request<TradeDecision>("/trade/proposals", json(body), token),
+  proposals: (token: string) => request<ProposalRow[]>("/trade/proposals?limit=30", {}, token),
+  decision: (token: string, id: number) => request<TradeDecision>(`/trade/decisions/${id}`, {}, token),
   riskAgent: (token: string, ticker: string) =>
     request<AgentOutput>(`/risk-agent/${encodeURIComponent(ticker)}`, {}, token),
   portfolios: (token: string) => request<PortfolioSummary[]>("/portfolios", {}, token),

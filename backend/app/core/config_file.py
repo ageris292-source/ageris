@@ -372,6 +372,23 @@ class OrchestratorRules(_Strict):
         return self
 
 
+class TradeEngineRules(_Strict):
+    cost_schedule: str
+    max_report_age_hours: Annotated[float, Field(gt=0, le=24 * 30)]
+    required_stance: Literal["POSITIVE_TILT"]
+    max_agent_conflicts: Annotated[int, Field(ge=0, le=10)]
+    benchmark_expected_annual_return: Annotated[float, Field(ge=0, lt=0.5)]
+    min_holding_days: Annotated[int, Field(ge=1, le=365)]
+    max_holding_days: Annotated[int, Field(ge=1, le=3650)]
+    max_order_value_fraction: Annotated[float, Field(gt=0, le=1)]
+
+    @model_validator(mode="after")
+    def _consistent(self) -> Self:
+        if self.min_holding_days > self.max_holding_days:
+            raise ValueError("trade_engine.min_holding_days must be <= max_holding_days")
+        return self
+
+
 class AegisConfig(_Strict):
     config_version: Annotated[str, Field(min_length=1)]
     trade_gates: TradeGateThresholds
@@ -388,7 +405,14 @@ class AegisConfig(_Strict):
     valuation: ValuationRules
     risk_analysis: RiskAnalysisRules
     orchestrator: OrchestratorRules
+    trade_engine: TradeEngineRules
     transaction_costs: Annotated[dict[str, CostSchedule], Field(min_length=1)]
+
+    @model_validator(mode="after")
+    def _cross_section(self) -> Self:
+        if self.trade_engine.cost_schedule not in self.transaction_costs:
+            raise ValueError("trade_engine.cost_schedule must name a transaction_costs schedule")
+        return self
 
     def fingerprint(self) -> str:
         """Stable SHA-256 of the effective configuration, recorded in audits."""

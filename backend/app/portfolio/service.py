@@ -13,7 +13,7 @@ from __future__ import annotations
 import math
 import uuid
 from dataclasses import dataclass
-from datetime import date, datetime
+from datetime import UTC, date, datetime, timedelta
 from decimal import Decimal
 from typing import Any, Literal
 
@@ -25,7 +25,7 @@ from app.agents.macro.agent import sector_of
 from app.analysis import risk as rk
 from app.core.config_file import AegisConfig, get_config
 from app.market_data import service as md
-from app.models import Portfolio, Position, Stock
+from app.models import Portfolio, PortfolioSnapshot, Position, Stock
 from app.risk import service as rs
 from app.services.audit import record_audit
 
@@ -200,10 +200,14 @@ def analyze(
     knowledge_at: datetime | None = None,
     candidate: tuple[Stock, float] | None = None,
     *,
+    candidate_quantity: int | None = None,
+    candidate_price: float | None = None,
     _cache: dict[int, Holding] | None = None,
 ) -> dict[str, Any]:
     """Analysis of the portfolio as of `as_of`; with `candidate` = (stock,
-    weight of CURRENT equity), analyses the portfolio after buying it from cash."""
+    weight of CURRENT equity), analyses the portfolio after buying it from cash.
+    `candidate_quantity` / `candidate_price` override the weight-derived
+    quantity and the last close (used by the trade risk engine)."""
     cfg = get_config()
     rc, rules, liq = cfg.risk_controls, cfg.risk_analysis, cfg.liquidity
     cache = _cache if _cache is not None else {}
@@ -235,14 +239,19 @@ def analyze(
                 "value": None,
             }
         else:
-            qty = math.floor(weight * equity / c.price)
+            px = candidate_price if candidate_price is not None else c.price
+            qty = (
+                candidate_quantity
+                if candidate_quantity is not None
+                else math.floor(weight * equity / px)
+            )
             existing = next((h for h in holdings if h.stock.id == stock.id), None)
-            value = qty * c.price
-            cash -= value
+            value = qty * c.price  # marked at the reference close
+            cash -= qty * px  # pay the (limit) price
             cand_info = {
                 "ticker": c.ticker,
                 "weight": weight,
-                "price": c.price,
+                "price": px,
                 "quantity": qty,
                 "value": value,
             }
@@ -512,3 +521,58 @@ def analyze(
         "common_sessions": len(common),
         "warnings": warnings,
     }
+
+
+# --------------------------------------------------- equity snapshots / losses
+
+
+def record_snapshot(
+    db: Session, pf: Portfolio, as_of: datetime, source: str = "eod"
+) -> PortfolioSnapshot | None:
+    """Mark the portfolio to market at as_of. Skipped (None) if any holding
+    has no price: an unknown mark is never stored as if it were known."""
+    a = analyze(db, pf, as_of)
+    if any(h["value"] is None for h in a["holdings"]):
+        return None
+    m = a["metrics"]
+    snap = PortfolioSnapshot(
+        portfolio_id=pf.id,
+        taken_at=as_of,
+        equity=float(m["equity"] or 0.0),
+        cash=float(m["cash"] or 0.0),
+        invested=float(m["invested"] or 0.0),
+        source=source,
+    )
+    db.add(snap)
+    db.flush()
+    return snap
+
+
+def loss_state(
+    db: Session, pf: Portfolio, equity_now: float, as_of: datetime
+) -> tuple[float, float, float]:
+    """(day change, week change, drawdown from peak) of equity, IST calendar.
+    Baselines are the last snapshot before the IST day / ISO week started,
+    falling back to the starting cash for a portfolio created within it."""
+    ist = rs.IST_OFFSET
+    local = as_of.astimezone(UTC) + ist
+    day_start = datetime(local.year, local.month, local.day, tzinfo=UTC) - ist
+    week_start = day_start - timedelta(days=local.weekday())
+    snaps = db.scalars(
+        select(PortfolioSnapshot)
+        .where(PortfolioSnapshot.portfolio_id == pf.id, PortfolioSnapshot.taken_at <= as_of)
+        .order_by(PortfolioSnapshot.taken_at)
+    ).all()
+    start = float(pf.starting_cash)
+
+    def base(before: datetime) -> float:
+        prior = [s.equity for s in snaps if s.taken_at < before]
+        return prior[-1] if prior else start
+
+    b_day, b_week = base(day_start), base(week_start)
+    peak = max([start, equity_now, *(s.equity for s in snaps)])
+    return (
+        equity_now / b_day - 1 if b_day > 0 else 0.0,
+        equity_now / b_week - 1 if b_week > 0 else 0.0,
+        1 - equity_now / peak if peak > 0 else 0.0,
+    )

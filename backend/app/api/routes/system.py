@@ -25,6 +25,7 @@ from app.services.trading_controls import (
     evaluate_execution_readiness,
     read_kill_switch,
 )
+from app.trade.gates import self_test as engine_self_test
 
 router = APIRouter()
 
@@ -56,7 +57,10 @@ def risk_status(db: DbSession, _user: CurrentUser) -> RiskStatusResponse:
     s = get_settings()
     cfg = get_config()
     ks = read_kill_switch(db)
-    readiness = evaluate_execution_readiness(s, ks)
+    engine_ok, _ = engine_self_test(cfg)
+    readiness = evaluate_execution_readiness(
+        s, ks, risk_engine_status="PASS" if engine_ok else "FAIL"
+    )
     return RiskStatusResponse(
         generated_at=datetime.now(UTC),
         system_mode=s.system_mode.value,

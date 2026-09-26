@@ -20,13 +20,14 @@ of profit.
 | 6 | Macro agent, market regime, valuation agent (DCF scenarios) | **Done** ([report](docs/phase-6-report.md)) |
 | 7 | Risk agent, portfolios, exposure/correlation checks, portfolio-fit agent | **Done** ([report](docs/phase-7-report.md)) |
 | 8 | Orchestrator, bull/bear synthesis, immutable research reports | **Done** ([report](docs/phase-8-report.md)) |
-| 9–15 | Trade risk engine, backtesting, paper trading, ranking, monitoring, … | In progress |
+| 9 | Trade Risk Engine: 24 ordered gates, cost model, sizing, immutable decisions | **Done** ([report](docs/phase-9-report.md)) |
+| 10–15 | Backtesting + calibrated model, paper trading, ranking, monitoring, … | In progress |
 
 Market scope: **Indian equities only** (NSE `.NS`, BSE `.BO`).
 
 Live trading is **not available** in this build. Execution readiness reports
-`broker_health` and `risk_engine` as `UNKNOWN`, which blocks both paper and
-live orders by design.
+`broker_health` as `UNKNOWN`, which blocks live orders by design. Every trade
+proposal must pass all 24 gates of the deterministic Trade Risk Engine.
 
 ## Safety defaults
 

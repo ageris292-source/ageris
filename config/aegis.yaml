@@ -5,7 +5,7 @@
 # being relied on (spec §26, §73). The file is validated strictly at startup:
 # unknown keys, out-of-range values and inconsistent limits abort boot.
 
-config_version: "2026.09.8"
+config_version: "2026.09.9"
 
 trade_gates:
   minimum_expected_net_return: 0.05      # 5% net of all modelled costs
@@ -253,6 +253,18 @@ orchestrator:
   conflict_gap: 25                       # two agents this far apart on either side of 50 conflict
   max_case_points: 6                     # bull / bear points listed per side
   conflict_confidence_penalty: 0.15      # per conflict, multiplicative
+
+# Trade Risk Engine (Phase 9). Deterministic gates evaluated in a fixed order;
+# a proposal is APPROVED only if every applicable gate is PASS. UNKNOWN fails.
+trade_engine:
+  cost_schedule: NSE_EQ_DELIVERY
+  max_report_age_hours: 24               # the research report must be this recent
+  required_stance: POSITIVE_TILT
+  max_agent_conflicts: 0
+  benchmark_expected_annual_return: 0.12 # NIFTY 50 long-run assumption for the edge gate
+  min_holding_days: 5
+  max_holding_days: 250
+  max_order_value_fraction: 0.10         # of equity, before the sizing gate
 
 # Transaction-cost schedules, expressed in basis points of traded value.
 # The example NSE schedule below MUST be checked against the current

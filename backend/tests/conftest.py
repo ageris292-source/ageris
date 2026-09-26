@@ -7,8 +7,19 @@ import os
 from collections.abc import Iterator
 from pathlib import Path
 
-os.environ.setdefault("DATABASE_URL", "postgresql+psycopg://aegis:aegis@localhost:5432/aegis_test")
-os.environ.setdefault("REDIS_URL", "redis://localhost:6379/15")
+# Tests wipe tables between cases, so they must NEVER run against a real
+# database, even if DATABASE_URL in the shell points at one. The test
+# database comes from AEGIS_TEST_DATABASE_URL (or DATABASE_URL only when it
+# already names a *_test database) and its name must end in "_test".
+_DEFAULT_TEST_DB = "postgresql+psycopg://aegis:aegis@localhost:5432/aegis_test"
+_env_db = os.environ.get("DATABASE_URL", "")
+_test_db = os.environ.get("AEGIS_TEST_DATABASE_URL") or (
+    _env_db if _env_db.split("?")[0].rsplit("/", 1)[-1].endswith("_test") else _DEFAULT_TEST_DB
+)
+if not _test_db.split("?")[0].rsplit("/", 1)[-1].endswith("_test"):
+    raise RuntimeError("refusing to run tests: the test database name must end in '_test'")
+os.environ["DATABASE_URL"] = _test_db
+os.environ["REDIS_URL"] = os.environ.get("AEGIS_TEST_REDIS_URL", "redis://localhost:6379/15")
 os.environ.setdefault("AEGIS_JWT_SECRET", "test-secret-" + "x" * 40)
 os.environ.setdefault("AEGIS_ENV", "test")
 for var in ("AEGIS_SYSTEM_MODE", "AEGIS_LIVE_TRADING_ENABLED", "AEGIS_DEMO_DATA"):
@@ -67,6 +78,9 @@ def _clean_state() -> Iterator[None]:
             "financials",
             "macro_data",
             "analysis_reports",
+            "trade_decisions",
+            "trade_proposals",
+            "portfolio_snapshots",
         ):
             conn.execute(text(f"ALTER TABLE {table} DISABLE TRIGGER USER"))
             conn.execute(text(f"DELETE FROM {table}"))  # noqa: S608  (fixed table names)

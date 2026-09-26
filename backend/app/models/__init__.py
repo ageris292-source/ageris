@@ -141,6 +141,13 @@ from app.models.portfolio import Portfolio, Position  # noqa: E402
 # Phase 8 analysis reports.
 from app.models.reports import AnalysisReport  # noqa: E402
 
+# Phase 9 trade proposals, decisions, equity snapshots.
+from app.models.trading import (  # noqa: E402
+    PortfolioSnapshot,
+    TradeDecisionRecord,
+    TradeProposalRecord,
+)
+
 __all__ = [
     "AgentOutputRecord",
     "AgentRun",
@@ -155,12 +162,15 @@ __all__ = [
     "MacroObservation",
     "NewsItem",
     "Portfolio",
+    "PortfolioSnapshot",
     "Position",
     "Price",
     "RiskEvent",
     "RiskEventSeverity",
     "Stock",
     "TechnicalIndicator",
+    "TradeDecisionRecord",
+    "TradeProposalRecord",
     "TradingControl",
     "User",
     "UserRole",
