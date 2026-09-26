@@ -350,6 +350,28 @@ class RiskAnalysisRules(_Strict):
         return self
 
 
+AGENT_NAMES = ("technical", "fundamental", "valuation", "risk", "news", "macro", "portfolio")
+
+
+class OrchestratorRules(_Strict):
+    agent_weights: dict[str, Annotated[float, Field(gt=0, le=1)]]
+    required_agents: list[str]
+    min_agents_ok: Annotated[int, Field(ge=1, le=7)]
+    stance_band: Annotated[float, Field(gt=0, lt=50)]
+    conflict_gap: Annotated[float, Field(gt=0, le=100)]
+    max_case_points: Annotated[int, Field(ge=1, le=20)]
+    conflict_confidence_penalty: Annotated[float, Field(ge=0, lt=1)]
+
+    @model_validator(mode="after")
+    def _consistent(self) -> Self:
+        unknown = (set(self.agent_weights) | set(self.required_agents)) - set(AGENT_NAMES)
+        if unknown:
+            raise ValueError(f"orchestrator references unknown agents {sorted(unknown)}")
+        if abs(sum(self.agent_weights.values()) - 1) > 1e-6:
+            raise ValueError("orchestrator.agent_weights must sum to 1")
+        return self
+
+
 class AegisConfig(_Strict):
     config_version: Annotated[str, Field(min_length=1)]
     trade_gates: TradeGateThresholds
@@ -365,6 +387,7 @@ class AegisConfig(_Strict):
     macro: MacroRules
     valuation: ValuationRules
     risk_analysis: RiskAnalysisRules
+    orchestrator: OrchestratorRules
     transaction_costs: Annotated[dict[str, CostSchedule], Field(min_length=1)]
 
     def fingerprint(self) -> str:

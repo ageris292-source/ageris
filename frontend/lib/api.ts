@@ -323,6 +323,50 @@ export interface PortfolioFit {
   details: { before: PortfolioAnalysis; after: PortfolioAnalysis };
 }
 
+export interface CasePoint {
+  agent: string;
+  signal: string;
+  detail: string;
+  weight: number;
+  evidence: string | null;
+}
+
+export type Stance = "POSITIVE_TILT" | "NEGATIVE_TILT" | "NO_CLEAR_TILT" | "INSUFFICIENT_DATA";
+
+export interface AnalysisReport {
+  report_id: number;
+  report_hash: string;
+  created_at: string | null;
+  hash_verified?: boolean;
+  ticker: string;
+  as_of: string;
+  knowledge_at: string;
+  synthesis: {
+    stance: Stance;
+    stance_text: string;
+    composite_score: number | null;
+    composite_basis: string;
+    confidence: number;
+    coverage: number;
+    insufficient_reasons: string[];
+    agents: {
+      agent: string;
+      status: string;
+      score: number | null;
+      confidence: number;
+      data_quality: number;
+      weight: number;
+    }[];
+    bull_case: CasePoint[];
+    bear_case: CasePoint[];
+    conflicts: { agents: string[]; scores: number[]; detail: string }[];
+    key_risks: { agent: string; risk: string }[];
+    data_warnings: { agent: string; warning: string }[];
+    decision: { trade: string; reason: string };
+  };
+  narrative: { text: string; source: string; warnings: string[] };
+}
+
 export class ApiError extends Error {
   constructor(public status: number, message: string) {
     super(message);
@@ -344,6 +388,15 @@ async function request<T>(path: string, init: RequestInit = {}, token?: string):
     throw new ApiError(res.status, detail);
   }
   return (await res.json()) as T;
+}
+
+async function requestText(path: string, token: string): Promise<string> {
+  const res = await fetch(`${API_URL}${path}`, {
+    headers: { Authorization: `Bearer ${token}` },
+    cache: "no-store",
+  });
+  if (!res.ok) throw new ApiError(res.status, res.statusText);
+  return res.text();
 }
 
 const json = (body: unknown): RequestInit => ({
@@ -411,6 +464,11 @@ export const api = {
   valuation: (token: string, ticker: string) =>
     request<Valuation>(`/valuation/${encodeURIComponent(ticker)}`, {}, token),
   regime: (token: string) => request<Regime>("/regime", {}, token),
+  runAnalysis: (token: string, ticker: string) =>
+    request<AnalysisReport>(`/analysis/${encodeURIComponent(ticker)}`, json({}), token),
+  latestAnalysis: (token: string, ticker: string) =>
+    request<AnalysisReport>(`/analysis/${encodeURIComponent(ticker)}/latest`, {}, token),
+  reportMarkdown: (token: string, id: number) => requestText(`/reports/${id}/markdown`, token),
   riskAgent: (token: string, ticker: string) =>
     request<AgentOutput>(`/risk-agent/${encodeURIComponent(ticker)}`, {}, token),
   portfolios: (token: string) => request<PortfolioSummary[]>("/portfolios", {}, token),

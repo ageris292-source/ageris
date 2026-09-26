@@ -138,9 +138,13 @@ from app.models.news import Document, DocumentChunk, NewsItem  # noqa: E402
 # Phase 7 portfolios.
 from app.models.portfolio import Portfolio, Position  # noqa: E402
 
+# Phase 8 analysis reports.
+from app.models.reports import AnalysisReport  # noqa: E402
+
 __all__ = [
     "AgentOutputRecord",
     "AgentRun",
+    "AnalysisReport",
     "AuditLog",
     "CorporateAction",
     "DataConflict",

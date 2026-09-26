@@ -11,6 +11,7 @@ import { FinancialsTable } from "@/components/FinancialsTable";
 import { NewsList } from "@/components/NewsList";
 import { TechnicalPanel } from "@/components/TechnicalPanel";
 import { ValuationDetails } from "@/components/ValuationDetails";
+import { ReportPanel } from "@/components/ReportPanel";
 import { useSession } from "@/components/useSession";
 import {
   api,
@@ -22,6 +23,7 @@ import {
   type PriceSeries,
   type StockDetail,
   type Valuation,
+  type AnalysisReport,
 } from "@/lib/api";
 
 const RANGES = [
@@ -77,8 +79,41 @@ export default function StockPage() {
   const [val, setVal] = useState<Valuation | null>(null);
   const [macroOut, setMacroOut] = useState<AgentOutput | null>(null);
   const [vmBusy, setVmBusy] = useState(false);
+  const [report, setReport] = useState<AnalysisReport | null>(null);
+  const [reportBusy, setReportBusy] = useState(false);
   const [riskOut, setRiskOut] = useState<AgentOutput | null>(null);
   const [riskBusy, setRiskBusy] = useState(false);
+
+  useEffect(() => {
+    if (!token) return;
+    guard((t) => api.latestAnalysis(t, ticker))
+      .then((r) => r && setReport(r))
+      .catch(() => setReport(null)); // 404 = no report yet
+  }, [token, guard, ticker]);
+
+  const runReport = useCallback(async () => {
+    setReportBusy(true);
+    try {
+      const r = await guard((t) => api.runAnalysis(t, ticker));
+      if (r) setReport(r);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Analysis failed");
+    } finally {
+      setReportBusy(false);
+    }
+  }, [guard, ticker]);
+
+  const downloadReport = useCallback(async () => {
+    if (!report) return;
+    const md = await guard((t) => api.reportMarkdown(t, report.report_id));
+    if (!md) return;
+    const url = URL.createObjectURL(new Blob([md], { type: "text/markdown" }));
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `aegis-${ticker}-report-${report.report_id}.md`;
+    a.click();
+    URL.revokeObjectURL(url);
+  }, [guard, report, ticker]);
 
   const runRisk = useCallback(async () => {
     setRiskBusy(true);
@@ -290,6 +325,8 @@ export default function StockPage() {
               {detail.licensing_notice}
             </div>
           )}
+
+          <ReportPanel report={report} busy={reportBusy} onRun={runReport} onDownload={downloadReport} />
 
           <section className="mb-4 rounded-lg border border-line bg-panel p-5">
             <div className="mb-4 flex flex-wrap items-center justify-between gap-3">

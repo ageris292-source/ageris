@@ -61,7 +61,13 @@ def _clean_state() -> Iterator[None]:
         conn.execute(text("UPDATE news SET duplicate_of = NULL"))
         conn.execute(text("DELETE FROM news"))
         conn.execute(text("ALTER TABLE news ENABLE TRIGGER USER"))
-        for table in ("technical_indicators", "agent_outputs", "financials", "macro_data"):
+        for table in (
+            "technical_indicators",
+            "agent_outputs",
+            "financials",
+            "macro_data",
+            "analysis_reports",
+        ):
             conn.execute(text(f"ALTER TABLE {table} DISABLE TRIGGER USER"))
             conn.execute(text(f"DELETE FROM {table}"))  # noqa: S608  (fixed table names)
             conn.execute(text(f"ALTER TABLE {table} ENABLE TRIGGER USER"))

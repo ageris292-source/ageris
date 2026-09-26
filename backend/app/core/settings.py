@@ -36,6 +36,12 @@ class Settings(BaseSettings):
     jwt_algorithm: str = "HS256"
     access_token_minutes: int = Field(default=60, ge=5, le=24 * 60, alias="AEGIS_TOKEN_MINUTES")
 
+    # Optional LLM narrator (Anthropic Messages API). It only rewrites the
+    # deterministic report in prose; its output is rejected if it introduces
+    # any number not present in the structured facts. Never an authority.
+    llm_api_key: SecretStr | None = Field(default=None, alias="AEGIS_LLM_API_KEY")
+    llm_model: str = Field(default="claude-sonnet-4-5", alias="AEGIS_LLM_MODEL")
+
     cors_origins: list[str] = Field(
         default_factory=lambda: ["http://localhost:3000"], alias="AEGIS_CORS_ORIGINS"
     )

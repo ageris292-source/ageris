@@ -10,7 +10,17 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app import __version__
-from app.api.routes import auth, fundamentals, macro, news, risk, stocks, system, technical
+from app.api.routes import (
+    analysis,
+    auth,
+    fundamentals,
+    macro,
+    news,
+    risk,
+    stocks,
+    system,
+    technical,
+)
 from app.core.config_file import get_config
 from app.core.settings import get_settings
 
@@ -58,6 +68,7 @@ def create_app() -> FastAPI:
     app.include_router(news.router)
     app.include_router(macro.router)
     app.include_router(risk.router)
+    app.include_router(analysis.router)
     return app
 
 

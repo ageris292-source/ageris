@@ -19,7 +19,8 @@ of profit.
 | 5 | News agent, FinBERT sentiment, document search (RAG) | **Done** ([report](docs/phase-5-report.md)) |
 | 6 | Macro agent, market regime, valuation agent (DCF scenarios) | **Done** ([report](docs/phase-6-report.md)) |
 | 7 | Risk agent, portfolios, exposure/correlation checks, portfolio-fit agent | **Done** ([report](docs/phase-7-report.md)) |
-| 8–15 | Orchestrator, trade risk engine, backtesting, paper trading, … | In progress |
+| 8 | Orchestrator, bull/bear synthesis, immutable research reports | **Done** ([report](docs/phase-8-report.md)) |
+| 9–15 | Trade risk engine, backtesting, paper trading, ranking, monitoring, … | In progress |
 
 Market scope: **Indian equities only** (NSE `.NS`, BSE `.BO`).
 

@@ -5,7 +5,7 @@
 # being relied on (spec §26, §73). The file is validated strictly at startup:
 # unknown keys, out-of-range values and inconsistent limits abort boot.
 
-config_version: "2026.09.7"
+config_version: "2026.09.8"
 
 trade_gates:
   minimum_expected_net_return: 0.05      # 5% net of all modelled costs
@@ -234,6 +234,25 @@ risk_analysis:
     diversification: 0.30
     volatility: 0.20
     sector: 0.10
+
+# Orchestrator + bull/bear synthesis (Phase 8). The research stance is a
+# weighted summary of agent scores; it is NOT a trade decision. Only the
+# deterministic Trade Risk Engine (Phase 9) can approve a trade proposal.
+orchestrator:
+  agent_weights:
+    technical: 0.20
+    fundamental: 0.20
+    valuation: 0.15
+    risk: 0.20
+    news: 0.10
+    macro: 0.10
+    portfolio: 0.05
+  required_agents: [risk]                # stance is INSUFFICIENT without these
+  min_agents_ok: 4
+  stance_band: 10                        # score >= 50+band positive tilt, <= 50-band negative
+  conflict_gap: 25                       # two agents this far apart on either side of 50 conflict
+  max_case_points: 6                     # bull / bear points listed per side
+  conflict_confidence_penalty: 0.15      # per conflict, multiplicative
 
 # Transaction-cost schedules, expressed in basis points of traded value.
 # The example NSE schedule below MUST be checked against the current
