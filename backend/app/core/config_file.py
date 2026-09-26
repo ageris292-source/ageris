@@ -243,6 +243,67 @@ class NewsRules(_Strict):
         return self
 
 
+class MacroRules(_Strict):
+    world_bank_indicators: dict[str, str]
+    world_bank_publication_lag_days: Annotated[int, Field(ge=0, le=730)]
+    market_series: dict[str, str]
+    benchmark: str
+    history_days: Annotated[int, Field(ge=300, le=4000)]
+    rbi_inflation_target: Annotated[float, Field(gt=0, lt=0.2)]
+    change_window_sessions: Annotated[int, Field(ge=5, le=260)]
+    vix_high: Annotated[float, Field(gt=0, le=100)]
+    vix_low: Annotated[float, Field(gt=0, le=100)]
+    trend_band: Annotated[float, Field(ge=0, lt=0.2)]
+    sector_sensitivities: dict[str, dict[str, Annotated[float, Field(ge=-1, le=1)]]]
+    default_sensitivities: dict[str, Annotated[float, Field(ge=-1, le=1)]]
+
+    @model_validator(mode="after")
+    def _consistent(self) -> Self:
+        if self.benchmark not in self.market_series:
+            raise ValueError("macro.benchmark must be one of macro.market_series")
+        if self.vix_low >= self.vix_high:
+            raise ValueError("macro.vix_low must be below vix_high")
+        known = set(self.market_series) | set(self.world_bank_indicators) | {"repo_rate"}
+        for sector, sens in {
+            **self.sector_sensitivities,
+            "default": self.default_sensitivities,
+        }.items():
+            unknown = set(sens) - known
+            if unknown:
+                raise ValueError(f"macro sensitivities for {sector} use unknown series {unknown}")
+        return self
+
+
+class ScenarioRates(_Strict):
+    bear: Annotated[float, Field(ge=0, lt=0.15)]
+    base: Annotated[float, Field(ge=0, lt=0.15)]
+    bull: Annotated[float, Field(ge=0, lt=0.15)]
+
+
+class ValuationRules(_Strict):
+    risk_free_rate: Annotated[float, Field(gt=0, lt=0.3)]
+    equity_risk_premium: Annotated[float, Field(gt=0, lt=0.2)]
+    projection_years: Annotated[int, Field(ge=3, le=15)]
+    terminal_growth: ScenarioRates
+    growth_spread: Annotated[float, Field(ge=0, lt=0.5)]
+    wacc_spread: Annotated[float, Field(ge=0, lt=0.1)]
+    min_growth: Annotated[float, Field(gt=-0.5, lt=0)]
+    max_growth: Annotated[float, Field(gt=0, lt=1)]
+    beta_lookback_weeks: Annotated[int, Field(ge=26, le=520)]
+    beta_bounds: tuple[float, float]
+    mos_scale: Annotated[float, Field(gt=0, le=2)]
+
+    @model_validator(mode="after")
+    def _consistent(self) -> Self:
+        tg = self.terminal_growth
+        if not tg.bear <= tg.base <= tg.bull:
+            raise ValueError("valuation.terminal_growth must satisfy bear <= base <= bull")
+        lo, hi = self.beta_bounds
+        if not 0 < lo < hi:
+            raise ValueError("valuation.beta_bounds must be 0 < low < high")
+        return self
+
+
 class CostSchedule(_Strict):
     brokerage_bps: Bps
     exchange_fee_bps: Bps
@@ -268,6 +329,8 @@ class AegisConfig(_Strict):
     technical: TechnicalRules
     fundamentals: FundamentalRules
     news: NewsRules
+    macro: MacroRules
+    valuation: ValuationRules
     transaction_costs: Annotated[dict[str, CostSchedule], Field(min_length=1)]
 
     def fingerprint(self) -> str:

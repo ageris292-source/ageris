@@ -5,7 +5,7 @@
 # being relied on (spec §26, §73). The file is validated strictly at startup:
 # unknown keys, out-of-range values and inconsistent limits abort boot.
 
-config_version: "2026.09.5"
+config_version: "2026.09.6"
 
 trade_gates:
   minimum_expected_net_return: 0.05      # 5% net of all modelled costs
@@ -162,6 +162,47 @@ news:
     rating_change: 0.6
     sector: 0.4
     other: 0.3
+
+# Macro agent + market regime (Phase 6).
+macro:
+  world_bank_indicators:                 # official, CC BY 4.0 (licensed with attribution)
+    cpi_inflation: FP.CPI.TOTL.ZG
+    gdp_growth: NY.GDP.MKTP.KD.ZG
+    usd_inr_annual: PA.NUS.FCRF
+  world_bank_publication_lag_days: 180   # annual figures assumed public ~6 months after year end
+  market_series:                         # Yahoo chart symbols (unlicensed)
+    nifty50: "^NSEI"
+    india_vix: "^INDIAVIX"
+    usd_inr: "USDINR=X"
+    brent: "BZ=F"
+    nifty_it: "^CNXIT"
+    nifty_bank: "^NSEBANK"
+  benchmark: nifty50
+  history_days: 1100
+  rbi_inflation_target: 0.04
+  change_window_sessions: 63             # ~3 months
+  vix_high: 20
+  vix_low: 13
+  trend_band: 0.02                       # |NIFTY / 200d avg - 1| below this => sideways
+  # How a sector tends to respond to a RISE in each driver (+1 benefits, -1 hurts).
+  sector_sensitivities:
+    IT_SERVICES: {usd_inr: 1.0, nifty_it: 1.0, repo_rate: -0.2, nifty50: 0.5}
+    PRIVATE_BANKS: {nifty_bank: 1.0, repo_rate: -0.5, gdp_growth: 1.0, nifty50: 0.5}
+  default_sensitivities: {nifty50: 1.0}
+
+# Valuation agent (Phase 6). Rates are ASSUMPTIONS to review regularly.
+valuation:
+  risk_free_rate: 0.065                  # India 10Y G-sec yield — manual assumption, verify
+  equity_risk_premium: 0.07
+  projection_years: 5
+  terminal_growth: {bear: 0.04, base: 0.05, bull: 0.06}
+  growth_spread: 0.04                    # bull/bear revenue growth = base +/- spread
+  wacc_spread: 0.01                      # bear WACC +1pt, bull -1pt
+  min_growth: -0.05
+  max_growth: 0.25
+  beta_lookback_weeks: 104
+  beta_bounds: [0.3, 2.5]
+  mos_scale: 0.30                        # score = 50 + 50 * tanh(margin_of_safety / scale)
 
 # Transaction-cost schedules, expressed in basis points of traded value.
 # The example NSE schedule below MUST be checked against the current

@@ -40,6 +40,12 @@ celery_app.conf.update(
             "task": "aegis.refresh_fundamentals",
             "schedule": crontab(minute=30, hour=2, day_of_week="sat"),
         },
+        # Index levels / VIX / FX / oil after the close; World Bank annual
+        # data is re-checked in the same job (idempotent, versioned).
+        "refresh-macro": {
+            "task": "aegis.refresh_macro",
+            "schedule": crontab(minute=0, hour=12, day_of_week="mon-fri"),
+        },
         "refresh-eod-prices": {
             "task": "aegis.refresh_eod_prices",
             "schedule": crontab(minute=45, hour=11, day_of_week="mon-fri"),
@@ -118,3 +124,13 @@ def refresh_fundamentals() -> dict[str, object]:
     return _for_each_stock(
         "fundamentals", lambda db, s: fs.ingest_from_yahoo(db, s, provider, None)
     )
+
+
+@celery_app.task(name="aegis.refresh_macro")  # type: ignore[untyped-decorator]
+def refresh_macro() -> dict[str, object]:
+    from app.db.session import _session_factory
+    from app.macro import service as ms
+
+    with _session_factory()() as db:
+        results = ms.ingest_all(db, None)
+    return {"job": "macro", "at": datetime.now(UTC).isoformat(), "results": results}

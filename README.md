@@ -15,8 +15,10 @@ of profit.
 | 1 | Foundation: API, DB, migrations, config, auth, kill switch, Docker, CI, UI shell | **Done** ([report](docs/phase-1-report.md)) |
 | 2 | Market data (NSE/BSE): providers, validation, versioned storage, stock pages | **Done** ([report](docs/phase-2-report.md)) |
 | 3 | Technical analysis agent (indicators, signals, feature store) | **Done** ([report](docs/phase-3-report.md)) |
-| 4 | Fundamental agent | Next — needs a financials data source decision |
-| 5–15 | Agents, trade risk engine, backtesting, paper trading, … | Planned |
+| 4 | Fundamental agent (statements, ratios, bank-aware scoring) | **Done** ([report](docs/phase-4-report.md)) |
+| 5 | News agent, FinBERT sentiment, document search (RAG) | **Done** ([report](docs/phase-5-report.md)) |
+| 6 | Macro agent, market regime, valuation agent (DCF scenarios) | **Done** ([report](docs/phase-6-report.md)) |
+| 7–15 | Risk/portfolio, orchestrator, trade risk engine, backtesting, paper trading, … | In progress |
 
 Market scope: **Indian equities only** (NSE `.NS`, BSE `.BO`).
 

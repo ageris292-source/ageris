@@ -10,6 +10,7 @@ import { FreshnessBadge, QualityBadge } from "@/components/StatusBadge";
 import { FinancialsTable } from "@/components/FinancialsTable";
 import { NewsList } from "@/components/NewsList";
 import { TechnicalPanel } from "@/components/TechnicalPanel";
+import { ValuationDetails } from "@/components/ValuationDetails";
 import { useSession } from "@/components/useSession";
 import {
   api,
@@ -20,6 +21,7 @@ import {
   type IndicatorSeries,
   type PriceSeries,
   type StockDetail,
+  type Valuation,
 } from "@/lib/api";
 
 const RANGES = [
@@ -72,6 +74,25 @@ export default function StockPage() {
   const [newsOut, setNewsOut] = useState<AgentOutput | null>(null);
   const [news, setNews] = useState<NewsItem[] | null>(null);
   const [newsBusy, setNewsBusy] = useState(false);
+  const [val, setVal] = useState<Valuation | null>(null);
+  const [macroOut, setMacroOut] = useState<AgentOutput | null>(null);
+  const [vmBusy, setVmBusy] = useState(false);
+
+  const runValMacro = useCallback(async () => {
+    setVmBusy(true);
+    try {
+      const [v, m] = await Promise.all([
+        guard((t) => api.valuation(t, ticker)),
+        guard((t) => api.macroAgent(t, ticker)),
+      ]);
+      if (v) setVal(v);
+      if (m) setMacroOut(m);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Valuation / macro analysis failed");
+    } finally {
+      setVmBusy(false);
+    }
+  }, [guard, ticker]);
 
   const loadDetail = useCallback(async () => {
     try {
@@ -164,6 +185,10 @@ export default function StockPage() {
   useEffect(() => {
     if (token && detail) void runNews(false);
   }, [token, detail?.ticker, runNews]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  useEffect(() => {
+    if (token && detail) void runValMacro();
+  }, [token, detail?.ticker, runValMacro]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     if (token && detail) void runFundamental(false);
@@ -350,6 +375,26 @@ export default function StockPage() {
           >
             <NewsList items={news} />
           </TechnicalPanel>
+
+          <TechnicalPanel
+            title="Valuation"
+            scoreLabel="Valuation score"
+            runLabel="Re-run"
+            out={val?.analysis ?? null}
+            busy={vmBusy}
+            onRun={runValMacro}
+          >
+            <ValuationDetails d={val?.details ?? null} />
+          </TechnicalPanel>
+
+          <TechnicalPanel
+            title="Macro & regime"
+            scoreLabel="Macro fit"
+            runLabel="Re-run"
+            out={macroOut}
+            busy={vmBusy}
+            onRun={runValMacro}
+          />
 
           <div className="grid gap-4 md:grid-cols-2">
             <Panel title="Data quality">

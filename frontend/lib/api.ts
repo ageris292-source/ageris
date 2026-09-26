@@ -225,6 +225,52 @@ export interface NewsItem {
   duplicate_of: number | null;
 }
 
+export interface DcfScenario {
+  per_share: number;
+  margin_of_safety: number;
+  enterprise_value: number;
+  equity_value: number;
+  terminal_share_of_ev: number;
+  assumptions: {
+    revenue: number;
+    growth: number;
+    fcf_margin: number;
+    wacc: number;
+    terminal_growth: number;
+    years: number;
+  };
+  notes: string[];
+}
+
+export interface ValuationDetails {
+  price?: number;
+  price_date?: string;
+  scenarios?: Record<"bear" | "base" | "bull", DcfScenario>;
+  sensitivity?: { wacc_deltas: number[]; growth_deltas: number[]; per_share: (number | null)[][] };
+  wacc?: number;
+  beta_raw?: number | null;
+  beta_used?: number;
+  beta_weeks?: number;
+  tax_rate?: number;
+  revenue_cagr?: number;
+  dcf_reliable?: boolean;
+  peer_medians?: Record<string, number | null>;
+}
+
+export interface Valuation {
+  analysis: AgentOutput;
+  details: ValuationDetails;
+}
+
+export interface Regime {
+  label: string;
+  trend: string;
+  volatility: string;
+  risk: string;
+  known: boolean;
+  evidence: Record<string, number | null>;
+}
+
 export class ApiError extends Error {
   constructor(public status: number, message: string) {
     super(message);
@@ -308,4 +354,9 @@ export const api = {
     request<IngestionRun>(`/news/${encodeURIComponent(ticker)}/ingest`, json({}), token),
   newsAgent: (token: string, ticker: string) =>
     request<AgentOutput>(`/news-agent/${encodeURIComponent(ticker)}`, {}, token),
+  macroAgent: (token: string, ticker: string) =>
+    request<AgentOutput>(`/macro-agent/${encodeURIComponent(ticker)}`, {}, token),
+  valuation: (token: string, ticker: string) =>
+    request<Valuation>(`/valuation/${encodeURIComponent(ticker)}`, {}, token),
+  regime: (token: string) => request<Regime>("/regime", {}, token),
 };

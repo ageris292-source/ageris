@@ -121,6 +121,9 @@ from app.models.agents import AgentOutputRecord, AgentRun, TechnicalIndicator  #
 
 # Phase 4 financial statements.
 from app.models.fundamentals import FinancialFact  # noqa: E402
+
+# Phase 6 macro observations.
+from app.models.macro import MacroObservation  # noqa: E402
 from app.models.market import (  # noqa: E402
     CorporateAction,
     DataConflict,
@@ -142,6 +145,7 @@ __all__ = [
     "Document",
     "DocumentChunk",
     "FinancialFact",
+    "MacroObservation",
     "NewsItem",
     "Price",
     "RiskEvent",
