@@ -1,0 +1,40 @@
+Metadata-Version: 2.4
+Name: aegis-backend
+Version: 0.1.0
+Summary: Aegis — multi-agent stock research, backtesting and (gated) trading platform
+Requires-Python: >=3.11
+Requires-Dist: fastapi<1.0,>=0.115
+Requires-Dist: uvicorn[standard]>=0.30
+Requires-Dist: pydantic<3,>=2.8
+Requires-Dist: pydantic-settings<3,>=2.4
+Requires-Dist: sqlalchemy<2.1,>=2.0.30
+Requires-Dist: psycopg[binary]<4,>=3.2
+Requires-Dist: alembic<2,>=1.13
+Requires-Dist: redis<6,>=5.0
+Requires-Dist: celery<6,>=5.4
+Requires-Dist: pyjwt<3,>=2.9
+Requires-Dist: argon2-cffi>=23.1
+Requires-Dist: pyyaml>=6.0
+Requires-Dist: python-multipart>=0.0.9
+Requires-Dist: httpx<1,>=0.27
+Requires-Dist: exchange-calendars<5,>=4.5
+Requires-Dist: pandas<3,>=2.2
+Requires-Dist: feedparser>=6.0
+Requires-Dist: pypdf>=4.0
+Requires-Dist: pgvector>=0.3
+Requires-Dist: lightgbm<5,>=4.3
+Requires-Dist: scikit-learn<2,>=1.4
+Provides-Extra: ml
+Requires-Dist: torch>=2.2; extra == "ml"
+Requires-Dist: transformers>=4.40; extra == "ml"
+Requires-Dist: sentence-transformers>=3.0; extra == "ml"
+Provides-Extra: dev
+Requires-Dist: pytest>=8.3; extra == "dev"
+Requires-Dist: pytest-cov>=5.0; extra == "dev"
+Requires-Dist: hypothesis>=6.100; extra == "dev"
+Requires-Dist: ruff>=0.6; extra == "dev"
+Requires-Dist: mypy>=1.11; extra == "dev"
+Requires-Dist: types-PyYAML; extra == "dev"
+Requires-Dist: types-redis; extra == "dev"
+Requires-Dist: ta>=0.11; extra == "dev"
+Requires-Dist: pandas-stubs; extra == "dev"
