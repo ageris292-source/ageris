@@ -23,7 +23,7 @@ class TradeProposal(BaseModel):
     entry_price: Decimal = Field(gt=0, max_digits=14, decimal_places=4)  # limit price
     stop_loss: Decimal | None = Field(default=None, gt=0, max_digits=14, decimal_places=4)
     target: Decimal | None = Field(default=None, gt=0, max_digits=14, decimal_places=4)
-    horizon_days: int = Field(default=20, ge=1, le=3650)
+    horizon_days: int = Field(default=20, ge=1, le=2520)  # TRADING days (sessions)
     portfolio_id: int
     mode: Literal["paper", "live"] = "paper"
     quoted_spread_bps: float | None = Field(default=None, ge=0, le=10_000)

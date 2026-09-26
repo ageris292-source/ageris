@@ -13,6 +13,7 @@ from app import __version__
 from app.api.routes import (
     analysis,
     auth,
+    backtest,
     fundamentals,
     macro,
     news,
@@ -71,6 +72,7 @@ def create_app() -> FastAPI:
     app.include_router(risk.router)
     app.include_router(analysis.router)
     app.include_router(trade.router)
+    app.include_router(backtest.router)
     return app
 
 

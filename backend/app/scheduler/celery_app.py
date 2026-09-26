@@ -46,6 +46,12 @@ celery_app.conf.update(
             "task": "aegis.refresh_macro",
             "schedule": crontab(minute=0, hour=12, day_of_week="mon-fri"),
         },
+        # Weekly walk-forward retrain -> CANDIDATE models only. Activation is
+        # always a human (admin) decision.
+        "retrain-models": {
+            "task": "aegis.retrain_models",
+            "schedule": crontab(minute=0, hour=4, day_of_week="sun"),
+        },
         "refresh-eod-prices": {
             "task": "aegis.refresh_eod_prices",
             "schedule": crontab(minute=45, hour=11, day_of_week="mon-fri"),
@@ -134,3 +140,17 @@ def refresh_macro() -> dict[str, object]:
     with _session_factory()() as db:
         results = ms.ingest_all(db, None)
     return {"job": "macro", "at": datetime.now(UTC).isoformat(), "results": results}
+
+
+@celery_app.task(name="aegis.retrain_models")  # type: ignore[untyped-decorator]
+def retrain_models() -> dict[str, object]:
+    from app.backtest.service import run_backtest
+    from app.core.config_file import get_config
+    from app.db.session import _session_factory
+
+    out: dict[str, object] = {}
+    with _session_factory()() as db:
+        for h in get_config().backtest.horizons:
+            run = run_backtest(db, h, None)
+            out[f"h{h}"] = {"run": run.id, "status": run.status}
+    return {"job": "retrain", "at": datetime.now(UTC).isoformat(), "results": out}

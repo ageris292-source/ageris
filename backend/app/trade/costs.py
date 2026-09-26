@@ -22,7 +22,7 @@ def round_trip(
     s: CostSchedule,
     order_value: float,
     adtv: float | None,
-    holding_days: int,
+    holding_days: int,  # trading days
     spread_bps: float | None = None,
 ) -> CostBreakdown:
     if order_value <= 0:
@@ -37,7 +37,7 @@ def round_trip(
     common = fees + gst + s.securities_tax_bps + s.slippage_bps + half_spread + impact
     buy = common + s.stamp_duty_buy_bps
     sell = common
-    financing = s.annual_financing_rate * holding_days / 365
+    financing = s.annual_financing_rate * holding_days / 252
     return CostBreakdown(
         schedule=name,
         buy_bps=round(buy, 4),

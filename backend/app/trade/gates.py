@@ -327,7 +327,7 @@ def _edge(e: _Eval) -> tuple[str, Any, Any, str]:
     if net is None:
         return "UNKNOWN", None, t, "Expected net return unknown"
     bench = (1 + e.cfg.trade_engine.benchmark_expected_annual_return) ** (
-        e.p.horizon_days / 365
+        e.p.horizon_days / 252
     ) - 1
     edge = net - bench
     e.metrics["edge_vs_benchmark"] = edge

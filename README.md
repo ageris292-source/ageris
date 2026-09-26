@@ -21,7 +21,8 @@ of profit.
 | 7 | Risk agent, portfolios, exposure/correlation checks, portfolio-fit agent | **Done** ([report](docs/phase-7-report.md)) |
 | 8 | Orchestrator, bull/bear synthesis, immutable research reports | **Done** ([report](docs/phase-8-report.md)) |
 | 9 | Trade Risk Engine: 24 ordered gates, cost model, sizing, immutable decisions | **Done** ([report](docs/phase-9-report.md)) |
-| 10–15 | Backtesting + calibrated model, paper trading, ranking, monitoring, … | In progress |
+| 10 | Walk-forward backtesting, calibrated LightGBM, reproducibility, model registry | **Done** ([report](docs/phase-10-report.md)) |
+| 11–15 | Paper trading, ranking + alerts, monitoring, security/deploy, live scaffolding | In progress |
 
 Market scope: **Indian equities only** (NSE `.NS`, BSE `.BO`).
 

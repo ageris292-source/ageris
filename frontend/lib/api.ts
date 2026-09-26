@@ -428,6 +428,71 @@ export interface ProposalRow {
   first_failure: string | null;
 }
 
+export interface BacktestSummary {
+  id: number;
+  created_at: string | null;
+  status: "running" | "completed" | "failed";
+  horizon: number;
+  as_of: string;
+  universe_size: number;
+  survivorship_bias: string;
+  duration_ms: number | null;
+  error: string | null;
+  headline: {
+    auc_profit: number | null;
+    ece_profit: number | null;
+    folds: number | null;
+    total_return: number | null;
+    benchmark_total_return: number | null;
+  };
+}
+
+export interface ClassMetrics {
+  n: number;
+  base_rate: number | null;
+  auc: number | null;
+  brier: number | null;
+  log_loss: number | null;
+  ece: number | null;
+}
+
+export interface BacktestDetail extends BacktestSummary {
+  universe: string[];
+  reproducibility: Record<string, unknown> & { libraries?: Record<string, string>; seed?: number };
+  data_hash: string | null;
+  config_fingerprint: string;
+  warnings: string[];
+  metrics: {
+    profit: ClassMetrics;
+    outperform: ClassMetrics;
+    calibration_curve_profit: { mean_predicted: number; observed_rate: number; count: number }[];
+    oos_start: string;
+    oos_end: string;
+    folds_trained: number;
+    folds_skipped: number;
+    oos_rows: number;
+  } | null;
+  folds: (Record<string, unknown> & { fold: number; test_start: string; test_end: string; skipped?: boolean; reason?: string; profit?: ClassMetrics })[] | null;
+  simulation: {
+    periods: { date: string; names: string[]; strategy_return: number; benchmark_return: number; equity: number; benchmark_equity: number }[];
+    summary: Record<string, number | null>;
+  } | null;
+}
+
+export interface ModelRow {
+  id: number;
+  name: string;
+  horizon: number;
+  status: "candidate" | "active" | "retired";
+  valid_from: string;
+  calibration_error: number;
+  oos_periods: number;
+  auc: number | null;
+  passes_calibration_gate: boolean;
+  passes_oos_gate: boolean;
+  backtest_run_id: number;
+}
+
 export class ApiError extends Error {
   constructor(public status: number, message: string) {
     super(message);
@@ -535,6 +600,13 @@ export const api = {
     request<TradeDecision>("/trade/proposals", json(body), token),
   proposals: (token: string) => request<ProposalRow[]>("/trade/proposals?limit=30", {}, token),
   decision: (token: string, id: number) => request<TradeDecision>(`/trade/decisions/${id}`, {}, token),
+  backtests: (token: string) => request<BacktestSummary[]>("/backtests", {}, token),
+  backtest: (token: string, id: number) => request<BacktestDetail>(`/backtests/${id}`, {}, token),
+  runBacktest: (token: string, horizon: number) =>
+    request<BacktestDetail>("/backtests", json({ horizon }), token),
+  models: (token: string) => request<ModelRow[]>("/models", {}, token),
+  setModel: (token: string, id: number, action: "activate" | "retire") =>
+    request<ModelRow>(`/models/${id}/${action}`, { method: "POST" }, token),
   riskAgent: (token: string, ticker: string) =>
     request<AgentOutput>(`/risk-agent/${encodeURIComponent(ticker)}`, {}, token),
   portfolios: (token: string) => request<PortfolioSummary[]>("/portfolios", {}, token),

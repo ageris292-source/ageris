@@ -23,6 +23,8 @@ dependencies = [
     "feedparser>=6.0",
     "pypdf>=4.0",
     "pgvector>=0.3",
+    "lightgbm>=4.3,<5",
+    "scikit-learn>=1.4,<2",
 ]
 
 [project.optional-dependencies]
@@ -76,5 +78,5 @@ plugins = ["pydantic.mypy"]
 exclude = ["alembic/", "tests/"]
 
 [[tool.mypy.overrides]]
-module = ["celery.*", "exchange_calendars.*", "feedparser.*", "pgvector.*", "transformers.*", "sentence_transformers.*"]
+module = ["celery.*", "exchange_calendars.*", "feedparser.*", "pgvector.*", "transformers.*", "sentence_transformers.*", "lightgbm.*", "sklearn.*"]
 ignore_missing_imports = true

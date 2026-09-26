@@ -7,6 +7,7 @@ const LINKS = [
   { href: "/", label: "Dashboard" },
   { href: "/stocks", label: "Stocks" },
   { href: "/portfolios", label: "Portfolios" },
+  { href: "/backtests", label: "Backtests" },
   { href: "/trade", label: "Trade risk" },
 ];
 

@@ -119,6 +119,9 @@ class TradingControl(Base):
 # Phase 3 agent runs + feature store.
 from app.models.agents import AgentOutputRecord, AgentRun, TechnicalIndicator  # noqa: E402
 
+# Phase 10 backtests + model registry.
+from app.models.backtest import BacktestRun, ModelVersion  # noqa: E402
+
 # Phase 4 financial statements.
 from app.models.fundamentals import FinancialFact  # noqa: E402
 
@@ -153,6 +156,7 @@ __all__ = [
     "AgentRun",
     "AnalysisReport",
     "AuditLog",
+    "BacktestRun",
     "CorporateAction",
     "DataConflict",
     "DataIngestionRun",
@@ -160,6 +164,7 @@ __all__ = [
     "DocumentChunk",
     "FinancialFact",
     "MacroObservation",
+    "ModelVersion",
     "NewsItem",
     "Portfolio",
     "PortfolioSnapshot",

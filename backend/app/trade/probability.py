@@ -2,8 +2,8 @@
 
 The proposal never supplies its own probability. The engine asks the
 registered source, which in production is the calibrated walk-forward model
-(Phase 10). With no source, the estimate is None and every gate that needs it
-is UNKNOWN, i.e. the proposal is rejected.
+(Phase 10). With no active model (or no honest estimate), the estimate is None
+and every gate that needs it is UNKNOWN, i.e. the proposal is rejected.
 """
 
 from __future__ import annotations
@@ -33,16 +33,20 @@ class ProbabilityEstimate:
 ProbabilitySource = Callable[[Session, Stock, datetime, int], ProbabilityEstimate | None]
 
 
-def _none(_db: Session, _s: Stock, _as_of: datetime, _h: int) -> ProbabilityEstimate | None:
-    return None
+def _registry(db: Session, s: Stock, as_of: datetime, h: int) -> ProbabilityEstimate | None:
+    """Default source: the active calibrated model in the registry (Phase 10)."""
+    from app.backtest.registry import estimate as registry_estimate
+
+    return registry_estimate(db, s, as_of, h)
 
 
-_source: ProbabilitySource = _none
+_source: ProbabilitySource = _registry
 
 
 def set_source(fn: ProbabilitySource | None) -> None:
+    """Override the source (tests); None restores the model registry."""
     global _source
-    _source = fn or _none
+    _source = fn or _registry
 
 
 def estimate(

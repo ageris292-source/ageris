@@ -389,6 +389,29 @@ class TradeEngineRules(_Strict):
         return self
 
 
+class LightGbmParams(_Strict):
+    n_estimators: Annotated[int, Field(ge=10, le=5000)]
+    learning_rate: Annotated[float, Field(gt=0, le=1)]
+    num_leaves: Annotated[int, Field(ge=2, le=1024)]
+    min_child_samples: Annotated[int, Field(ge=1, le=10000)]
+    subsample: Annotated[float, Field(gt=0, le=1)]
+    colsample_bytree: Annotated[float, Field(gt=0, le=1)]
+    reg_lambda: Annotated[float, Field(ge=0, le=100)]
+
+
+class BacktestRules(_Strict):
+    horizons: Annotated[list[Annotated[int, Field(ge=1, le=250)]], Field(min_length=1)]
+    min_train_sessions: Annotated[int, Field(ge=100, le=5000)]
+    test_fold_sessions: Annotated[int, Field(ge=5, le=500)]
+    embargo_sessions: Annotated[int, Field(ge=0, le=250)]
+    calibration_fraction: Annotated[float, Field(gt=0, lt=0.5)]
+    calibration_bins: Annotated[int, Field(ge=5, le=50)]
+    min_train_samples: Annotated[int, Field(ge=100)]
+    seed: int
+    top_k: Annotated[int, Field(ge=1, le=100)]
+    lightgbm: LightGbmParams
+
+
 class AegisConfig(_Strict):
     config_version: Annotated[str, Field(min_length=1)]
     trade_gates: TradeGateThresholds
@@ -406,6 +429,7 @@ class AegisConfig(_Strict):
     risk_analysis: RiskAnalysisRules
     orchestrator: OrchestratorRules
     trade_engine: TradeEngineRules
+    backtest: BacktestRules
     transaction_costs: Annotated[dict[str, CostSchedule], Field(min_length=1)]
 
     @model_validator(mode="after")
