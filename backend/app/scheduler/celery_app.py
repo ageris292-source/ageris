@@ -52,6 +52,11 @@ celery_app.conf.update(
             "task": "aegis.retrain_models",
             "schedule": crontab(minute=0, hour=4, day_of_week="sun"),
         },
+        # After the EOD price refresh: mark paper portfolios, check theses.
+        "paper-eod": {
+            "task": "aegis.paper_eod",
+            "schedule": crontab(minute=15, hour=12, day_of_week="mon-fri"),
+        },
         "refresh-eod-prices": {
             "task": "aegis.refresh_eod_prices",
             "schedule": crontab(minute=45, hour=11, day_of_week="mon-fri"),
@@ -154,3 +159,20 @@ def retrain_models() -> dict[str, object]:
             run = run_backtest(db, h, None)
             out[f"h{h}"] = {"run": run.id, "status": run.status}
     return {"job": "retrain", "at": datetime.now(UTC).isoformat(), "results": out}
+
+
+@celery_app.task(name="aegis.paper_eod")  # type: ignore[untyped-decorator]
+def paper_eod() -> dict[str, object]:
+    from app.db.session import _session_factory
+    from app.paper import service as paper
+
+    now = datetime.now(UTC)
+    with _session_factory()() as db:
+        n = paper.snapshot_all(db, now)
+        events = paper.monitor(db, now)
+    return {
+        "job": "paper_eod",
+        "at": now.isoformat(),
+        "snapshots": n,
+        "events": [f"{e.thesis_id}:{e.kind}" for e in events],
+    }

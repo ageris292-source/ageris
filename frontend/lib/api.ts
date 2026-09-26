@@ -426,6 +426,7 @@ export interface ProposalRow {
   portfolio_id: number;
   decision: "APPROVED" | "REJECTED";
   first_failure: string | null;
+  rationale?: string;
 }
 
 export interface BacktestSummary {
@@ -491,6 +492,56 @@ export interface ModelRow {
   passes_calibration_gate: boolean;
   passes_oos_gate: boolean;
   backtest_run_id: number;
+}
+
+export interface PaperOrderOut {
+  id: number;
+  created_at: string | null;
+  decision_id: number;
+  recheck_decision_id: number | null;
+  portfolio_id: number;
+  ticker: string;
+  side: string;
+  quantity: number;
+  limit_price: string;
+  status: "FILLED" | "REJECTED";
+  reason: string;
+  replayed?: boolean;
+}
+
+export interface PaperPortfolioOut {
+  analysis: PortfolioAnalysis;
+  starting_cash: string;
+  total_return: number | null;
+  realised_pnl: string;
+  fees_paid: string;
+  executions: {
+    id: number;
+    order_id: number;
+    executed_at: string;
+    side: string;
+    quantity: number;
+    reference_price: string;
+    fill_price: string;
+    notional: string;
+    fees: string;
+    realised_pnl: string | null;
+    cash_after: string;
+    ticker: string;
+  }[];
+  theses: {
+    id: number;
+    ticker: string;
+    status: string;
+    opened_at: string;
+    entry_price: string;
+    stop_loss: string;
+    target: string;
+    horizon_end: string;
+    invalidation: string[];
+    events: { session: string; kind: string; detail: string; exit_proposal_id: number | null; exit_decision: string | null }[];
+  }[];
+  equity_curve: { taken_at: string; equity: number; source: string }[];
 }
 
 export class ApiError extends Error {
@@ -607,6 +658,19 @@ export const api = {
   models: (token: string) => request<ModelRow[]>("/models", {}, token),
   setModel: (token: string, id: number, action: "activate" | "retire") =>
     request<ModelRow>(`/models/${id}/${action}`, { method: "POST" }, token),
+  placePaperOrder: (token: string, decisionId: number, key: string) =>
+    request<PaperOrderOut>(
+      "/paper/orders",
+      { ...json({ decision_id: decisionId }), headers: { "Content-Type": "application/json", "Idempotency-Key": key } },
+      token,
+    ),
+  paperOrders: (token: string, portfolioId: number) =>
+    request<PaperOrderOut[]>(`/paper/orders?portfolio_id=${portfolioId}`, {}, token),
+  paperPortfolio: (token: string, id: number) => request<PaperPortfolioOut>(`/paper/portfolios/${id}`, {}, token),
+  runMonitor: (token: string) =>
+    request<{ events: { thesis_id: number; kind: string; detail: string }[] }>("/paper/monitor", { method: "POST" }, token),
+  proposalsFor: (token: string, portfolioId: number) =>
+    request<ProposalRow[]>(`/trade/proposals?portfolio_id=${portfolioId}&limit=100`, {}, token),
   riskAgent: (token: string, ticker: string) =>
     request<AgentOutput>(`/risk-agent/${encodeURIComponent(ticker)}`, {}, token),
   portfolios: (token: string) => request<PortfolioSummary[]>("/portfolios", {}, token),

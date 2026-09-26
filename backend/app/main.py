@@ -17,6 +17,7 @@ from app.api.routes import (
     fundamentals,
     macro,
     news,
+    paper,
     risk,
     stocks,
     system,
@@ -73,6 +74,7 @@ def create_app() -> FastAPI:
     app.include_router(analysis.router)
     app.include_router(trade.router)
     app.include_router(backtest.router)
+    app.include_router(paper.router)
     return app
 
 

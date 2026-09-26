@@ -5,7 +5,7 @@
 # being relied on (spec §26, §73). The file is validated strictly at startup:
 # unknown keys, out-of-range values and inconsistent limits abort boot.
 
-config_version: "2026.09.10"
+config_version: "2026.09.12"
 
 trade_gates:
   minimum_expected_net_return: 0.05      # 5% net of all modelled costs
@@ -265,6 +265,30 @@ trade_engine:
   min_holding_days: 5                    # trading days
   max_holding_days: 250
   max_order_value_fraction: 0.10         # of equity, before the sizing gate
+
+# Paper trading (Phase 11). Orders need an APPROVED decision, a human
+# approver with this role, an idempotency key and a passing re-check.
+paper_trading:
+  approver_role: admin
+  max_decision_age_minutes: 60           # older approvals must be re-proposed
+  fill_model: reference_close_plus_costs # adverse slippage + half spread + impact
+
+# Daily ranking, no-trade analytics and alerts (Phase 12). A stock is a
+# QUALIFIED opportunity only if every opportunity gate of the Trade Risk
+# Engine passes for a standardised candidate trade. Operational gates (kill
+# switch, mode, portfolio kind) and the live-quote spread gate are reported
+# separately: they block orders, not the quality of an opportunity.
+ranking:
+  horizon: 20                            # trading days (must have a model horizon)
+  stop_atr_multiple: 2.0                 # standard stop = entry - k x ATR(14) ...
+  min_stop_fraction: 0.03                # ... but at least this far below entry
+  target_reward_multiple: 2.5            # standard target = entry + m x stop distance
+  refresh_reports: true                  # re-run the orchestrator for stale reports
+  top_n: 10
+alerts:
+  telegram_enabled: false                # needs AEGIS_TELEGRAM_BOT_TOKEN + AEGIS_TELEGRAM_CHAT_ID
+  email_enabled: false                   # needs AEGIS_SMTP_URL + AEGIS_ALERT_EMAIL_TO
+  min_severity_to_push: warning          # info | warning | critical
 
 # Walk-forward backtesting and the probability model (Phase 10).
 # Horizons are in trading days. Labels start at the NEXT session's close

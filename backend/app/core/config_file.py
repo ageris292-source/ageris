@@ -389,6 +389,27 @@ class TradeEngineRules(_Strict):
         return self
 
 
+class PaperTradingRules(_Strict):
+    approver_role: Literal["admin"]
+    max_decision_age_minutes: Annotated[int, Field(ge=1, le=24 * 60)]
+    fill_model: Literal["reference_close_plus_costs"]
+
+
+class RankingRules(_Strict):
+    horizon: Annotated[int, Field(ge=1, le=250)]
+    stop_atr_multiple: Annotated[float, Field(gt=0, le=10)]
+    min_stop_fraction: Annotated[float, Field(gt=0, lt=0.5)]
+    target_reward_multiple: Annotated[float, Field(ge=1, le=20)]
+    refresh_reports: bool
+    top_n: Annotated[int, Field(ge=1, le=500)]
+
+
+class AlertRules(_Strict):
+    telegram_enabled: bool
+    email_enabled: bool
+    min_severity_to_push: Literal["info", "warning", "critical"]
+
+
 class LightGbmParams(_Strict):
     n_estimators: Annotated[int, Field(ge=10, le=5000)]
     learning_rate: Annotated[float, Field(gt=0, le=1)]
@@ -430,10 +451,15 @@ class AegisConfig(_Strict):
     orchestrator: OrchestratorRules
     trade_engine: TradeEngineRules
     backtest: BacktestRules
+    paper_trading: PaperTradingRules
+    ranking: RankingRules
+    alerts: AlertRules
     transaction_costs: Annotated[dict[str, CostSchedule], Field(min_length=1)]
 
     @model_validator(mode="after")
     def _cross_section(self) -> Self:
+        if self.ranking.horizon not in self.backtest.horizons:
+            raise ValueError("ranking.horizon must be one of backtest.horizons")
         if self.trade_engine.cost_schedule not in self.transaction_costs:
             raise ValueError("trade_engine.cost_schedule must name a transaction_costs schedule")
         return self

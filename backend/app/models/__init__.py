@@ -138,8 +138,14 @@ from app.models.market import (  # noqa: E402
 # Phase 5 news + documents.
 from app.models.news import Document, DocumentChunk, NewsItem  # noqa: E402
 
+# Phase 11 paper trading.
+from app.models.paper import PaperExecution, PaperOrder, Thesis, ThesisEvent  # noqa: E402
+
 # Phase 7 portfolios.
 from app.models.portfolio import Portfolio, Position  # noqa: E402
+
+# Phase 12 rankings + alerts.
+from app.models.ranking import Alert, RankingRun  # noqa: E402
 
 # Phase 8 analysis reports.
 from app.models.reports import AnalysisReport  # noqa: E402
@@ -154,6 +160,7 @@ from app.models.trading import (  # noqa: E402
 __all__ = [
     "AgentOutputRecord",
     "AgentRun",
+    "Alert",
     "AnalysisReport",
     "AuditLog",
     "BacktestRun",
@@ -166,14 +173,19 @@ __all__ = [
     "MacroObservation",
     "ModelVersion",
     "NewsItem",
+    "PaperExecution",
+    "PaperOrder",
     "Portfolio",
     "PortfolioSnapshot",
     "Position",
     "Price",
+    "RankingRun",
     "RiskEvent",
     "RiskEventSeverity",
     "Stock",
     "TechnicalIndicator",
+    "Thesis",
+    "ThesisEvent",
     "TradeDecisionRecord",
     "TradeProposalRecord",
     "TradingControl",

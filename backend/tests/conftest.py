@@ -62,6 +62,12 @@ def _clean_state() -> Iterator[None]:
     yield
     with get_engine().begin() as conn:
         # Test-only cleanup: immutability triggers are bypassed here and nowhere else.
+        conn.execute(text("ALTER TABLE paper_executions DISABLE TRIGGER USER"))
+        conn.execute(text("DELETE FROM paper_executions"))
+        conn.execute(text("ALTER TABLE paper_executions ENABLE TRIGGER USER"))
+        conn.execute(text("DELETE FROM thesis_events"))
+        conn.execute(text("DELETE FROM theses"))
+        conn.execute(text("DELETE FROM paper_orders"))
         conn.execute(text("ALTER TABLE audit_logs DISABLE TRIGGER USER"))
         conn.execute(text("DELETE FROM audit_logs"))
         conn.execute(text("ALTER TABLE audit_logs ENABLE TRIGGER USER"))

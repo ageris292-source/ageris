@@ -9,6 +9,7 @@ const LINKS = [
   { href: "/portfolios", label: "Portfolios" },
   { href: "/backtests", label: "Backtests" },
   { href: "/trade", label: "Trade risk" },
+  { href: "/paper", label: "Paper trading" },
 ];
 
 export function Nav({

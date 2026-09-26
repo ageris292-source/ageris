@@ -42,6 +42,15 @@ class Settings(BaseSettings):
     llm_api_key: SecretStr | None = Field(default=None, alias="AEGIS_LLM_API_KEY")
     llm_model: str = Field(default="claude-sonnet-4-5", alias="AEGIS_LLM_MODEL")
 
+    # Optional alert channels (Phase 12). In-app alerts always work.
+    telegram_bot_token: SecretStr | None = Field(default=None, alias="AEGIS_TELEGRAM_BOT_TOKEN")
+    telegram_chat_id: str | None = Field(default=None, alias="AEGIS_TELEGRAM_CHAT_ID")
+    smtp_url: SecretStr | None = Field(
+        default=None, alias="AEGIS_SMTP_URL"
+    )  # smtp(s)://user:pass@host:port
+    alert_email_to: str | None = Field(default=None, alias="AEGIS_ALERT_EMAIL_TO")
+    alert_email_from: str = Field(default="aegis@localhost", alias="AEGIS_ALERT_EMAIL_FROM")
+
     cors_origins: list[str] = Field(
         default_factory=lambda: ["http://localhost:3000"], alias="AEGIS_CORS_ORIGINS"
     )

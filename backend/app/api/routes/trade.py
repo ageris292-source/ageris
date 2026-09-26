@@ -66,6 +66,7 @@ def list_proposals(
             "decision": d.decision,
             "first_failure": d.first_failure,
             "failed_gates": d.failed_gates,
+            "rationale": p.rationale,
         }
         for p, d in rows
     ]

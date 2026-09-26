@@ -22,7 +22,8 @@ of profit.
 | 8 | Orchestrator, bull/bear synthesis, immutable research reports | **Done** ([report](docs/phase-8-report.md)) |
 | 9 | Trade Risk Engine: 24 ordered gates, cost model, sizing, immutable decisions | **Done** ([report](docs/phase-9-report.md)) |
 | 10 | Walk-forward backtesting, calibrated LightGBM, reproducibility, model registry | **Done** ([report](docs/phase-10-report.md)) |
-| 11–15 | Paper trading, ranking + alerts, monitoring, security/deploy, live scaffolding | In progress |
+| 11 | Paper trading: human approval, pre-order re-check, idempotent orders, fills, theses | **Done** ([report](docs/phase-11-report.md)) |
+| 12–15 | Ranking + alerts, monitoring, security/deploy, live scaffolding | In progress |
 
 Market scope: **Indian equities only** (NSE `.NS`, BSE `.BO`).
 
