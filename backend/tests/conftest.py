@@ -55,7 +55,7 @@ def _clean_state() -> Iterator[None]:
         conn.execute(text("DELETE FROM audit_logs"))
         conn.execute(text("ALTER TABLE audit_logs ENABLE TRIGGER USER"))
         conn.execute(text("DELETE FROM risk_events"))
-        for table in ("technical_indicators", "agent_outputs"):
+        for table in ("technical_indicators", "agent_outputs", "financials"):
             conn.execute(text(f"ALTER TABLE {table} DISABLE TRIGGER USER"))
             conn.execute(text(f"DELETE FROM {table}"))  # noqa: S608  (fixed table names)
             conn.execute(text(f"ALTER TABLE {table} ENABLE TRIGGER USER"))

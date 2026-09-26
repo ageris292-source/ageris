@@ -5,7 +5,7 @@
 # being relied on (spec §26, §73). The file is validated strictly at startup:
 # unknown keys, out-of-range values and inconsistent limits abort boot.
 
-config_version: "2026.09.3"
+config_version: "2026.09.4"
 
 trade_gates:
   minimum_expected_net_return: 0.05      # 5% net of all modelled costs
@@ -101,6 +101,37 @@ technical:
     breakout: 0.15
     volume: 0.10
     mean_reversion: 0.10
+
+# Fundamental analysis agent (Phase 4).
+fundamentals:
+  # When a source does not state when figures were published, availability is
+  # ESTIMATED from SEBI LODR filing deadlines (Reg. 33: quarterly results within
+  # 45 days of quarter end; audited annual results within 60 days of year end).
+  # Estimated availability is never used for historical backtests.
+  quarterly_publication_lag_days: 45
+  annual_publication_lag_days: 60
+  min_annual_periods: 2
+  margin_deterioration_pts: 0.02         # operating margin down >= 2 percentage points
+  weak_cash_conversion: 0.80             # FCF / net income below this
+  max_debt_to_equity: 1.0
+  min_interest_coverage: 3.0
+  strong_growth: 0.15
+  high_roe: 0.15
+  high_roce: 0.15
+  expensive_pe: 40
+  cheap_pe: 12
+  peer_groups:                           # optional peer lists for relative comparison
+    IT_SERVICES: [TCS.NS, INFY.NS, WIPRO.NS, HCLTECH.NS, TECHM.NS]
+    PRIVATE_BANKS: [HDFCBANK.NS, ICICIBANK.NS, KOTAKBANK.NS, AXISBANK.NS]
+  # Lenders: industrial leverage / cash-flow ratios do not apply and are skipped.
+  financial_sector_groups: [PRIVATE_BANKS]
+  min_growth_for_peg: 0.05               # PEG is meaningless on near-zero growth
+  category_weights:
+    growth: 0.25
+    profitability: 0.25
+    balance_sheet: 0.20
+    cash_quality: 0.15
+    valuation: 0.15
 
 # Transaction-cost schedules, expressed in basis points of traded value.
 # The example NSE schedule below MUST be checked against the current

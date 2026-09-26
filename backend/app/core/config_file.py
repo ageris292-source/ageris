@@ -163,6 +163,39 @@ class TechnicalRules(_Strict):
         return self
 
 
+class FundamentalRules(_Strict):
+    quarterly_publication_lag_days: Annotated[int, Field(ge=0, le=180)]
+    annual_publication_lag_days: Annotated[int, Field(ge=0, le=365)]
+    min_annual_periods: Annotated[int, Field(ge=1, le=20)]
+    margin_deterioration_pts: Annotated[float, Field(gt=0, lt=1)]
+    weak_cash_conversion: Annotated[float, Field(gt=0, le=2)]
+    max_debt_to_equity: Annotated[float, Field(gt=0, le=20)]
+    min_interest_coverage: Annotated[float, Field(gt=0, le=100)]
+    strong_growth: Annotated[float, Field(gt=0, lt=5)]
+    high_roe: Annotated[float, Field(gt=0, lt=5)]
+    high_roce: Annotated[float, Field(gt=0, lt=5)]
+    expensive_pe: Annotated[float, Field(gt=0, le=500)]
+    cheap_pe: Annotated[float, Field(gt=0, le=500)]
+    peer_groups: dict[str, list[str]] = Field(default_factory=dict)
+    financial_sector_groups: list[str] = Field(default_factory=list)
+    min_growth_for_peg: Annotated[float, Field(gt=0, lt=1)] = 0.05
+    category_weights: dict[
+        Literal["growth", "profitability", "balance_sheet", "cash_quality", "valuation"],
+        Annotated[float, Field(ge=0, le=1)],
+    ]
+
+    @model_validator(mode="after")
+    def _consistent(self) -> Self:
+        if self.cheap_pe >= self.expensive_pe:
+            raise ValueError("fundamentals.cheap_pe must be below expensive_pe")
+        unknown = set(self.financial_sector_groups) - set(self.peer_groups)
+        if unknown:
+            raise ValueError(f"financial_sector_groups not in peer_groups: {sorted(unknown)}")
+        if abs(sum(self.category_weights.values()) - 1.0) > 1e-9:
+            raise ValueError("fundamentals.category_weights must sum to 1")
+        return self
+
+
 class CostSchedule(_Strict):
     brokerage_bps: Bps
     exchange_fee_bps: Bps
@@ -186,6 +219,7 @@ class AegisConfig(_Strict):
     execution: ExecutionRules
     market_data: MarketDataRules
     technical: TechnicalRules
+    fundamentals: FundamentalRules
     transaction_costs: Annotated[dict[str, CostSchedule], Field(min_length=1)]
 
     def fingerprint(self) -> str:

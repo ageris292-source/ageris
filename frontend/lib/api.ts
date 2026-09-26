@@ -196,6 +196,23 @@ export interface IndicatorSeries {
   points: IndicatorPoint[];
 }
 
+export interface FinancialPeriod {
+  period_end: string;
+  values: Record<string, number>;
+  ratios: Record<string, number | null>;
+}
+
+export interface Financials {
+  ticker: string;
+  currency: string;
+  sources: string[];
+  licensed: boolean | null;
+  availability_estimated: boolean;
+  annual: FinancialPeriod[];
+  quarterly: FinancialPeriod[];
+  notice: string | null;
+}
+
 export class ApiError extends Error {
   constructor(public status: number, message: string) {
     super(message);
@@ -267,4 +284,10 @@ export const api = {
       {},
       token,
     ),
+  fundamental: (token: string, ticker: string) =>
+    request<AgentOutput>(`/fundamental/${encodeURIComponent(ticker)}`, {}, token),
+  financials: (token: string, ticker: string) =>
+    request<Financials>(`/financials/${encodeURIComponent(ticker)}`, {}, token),
+  ingestFinancials: (token: string, ticker: string) =>
+    request<IngestionRun>(`/financials/${encodeURIComponent(ticker)}/ingest`, json({}), token),
 };

@@ -118,6 +118,9 @@ class TradingControl(Base):
 # Phase 2 market-data tables (imported here so they register on Base.metadata).
 # Phase 3 agent runs + feature store.
 from app.models.agents import AgentOutputRecord, AgentRun, TechnicalIndicator  # noqa: E402
+
+# Phase 4 financial statements.
+from app.models.fundamentals import FinancialFact  # noqa: E402
 from app.models.market import (  # noqa: E402
     CorporateAction,
     DataConflict,
@@ -133,6 +136,7 @@ __all__ = [
     "CorporateAction",
     "DataConflict",
     "DataIngestionRun",
+    "FinancialFact",
     "Price",
     "RiskEvent",
     "RiskEventSeverity",

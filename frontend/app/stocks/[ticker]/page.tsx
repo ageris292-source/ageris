@@ -7,11 +7,13 @@ import { Login } from "@/components/Login";
 import { Nav } from "@/components/Nav";
 import { PriceChart } from "@/components/PriceChart";
 import { FreshnessBadge, QualityBadge } from "@/components/StatusBadge";
+import { FinancialsTable } from "@/components/FinancialsTable";
 import { TechnicalPanel } from "@/components/TechnicalPanel";
 import { useSession } from "@/components/useSession";
 import {
   api,
   type AgentOutput,
+  type Financials,
   type Basis,
   type IndicatorSeries,
   type PriceSeries,
@@ -62,6 +64,9 @@ export default function StockPage() {
   const [tech, setTech] = useState<AgentOutput | null>(null);
   const [techBusy, setTechBusy] = useState(false);
   const [indicators, setIndicators] = useState<IndicatorSeries | null>(null);
+  const [fund, setFund] = useState<AgentOutput | null>(null);
+  const [fin, setFin] = useState<Financials | null>(null);
+  const [fundBusy, setFundBusy] = useState(false);
 
   const loadDetail = useCallback(async () => {
     try {
@@ -104,6 +109,33 @@ export default function StockPage() {
   useEffect(() => {
     if (token && end) void runTechnical();
   }, [token, end, runTechnical]);
+
+  const runFundamental = useCallback(
+    async (fetchFirst: boolean) => {
+      setFundBusy(true);
+      try {
+        if (fetchFirst) {
+          const run = await guard((t) => api.ingestFinancials(t, ticker));
+          if (run && run.status === "failed") setError(`Financials fetch failed: ${run.error}`);
+        }
+        const [f, out] = await Promise.all([
+          guard((t) => api.financials(t, ticker)),
+          guard((t) => api.fundamental(t, ticker)),
+        ]);
+        if (f) setFin(f);
+        if (out) setFund(out);
+      } catch (err) {
+        setError(err instanceof Error ? err.message : "Fundamental analysis failed");
+      } finally {
+        setFundBusy(false);
+      }
+    },
+    [guard, ticker],
+  );
+
+  useEffect(() => {
+    if (token && detail) void runFundamental(false);
+  }, [token, detail?.ticker, runFundamental]); // eslint-disable-line react-hooks/exhaustive-deps
 
   async function refresh() {
     setBusy(true);
@@ -264,6 +296,17 @@ export default function StockPage() {
           </section>
 
           <TechnicalPanel out={tech} busy={techBusy} onRun={runTechnical} />
+
+          <TechnicalPanel
+            title="Fundamental analysis"
+            scoreLabel="Fundamental score"
+            runLabel="Fetch financials & re-run"
+            out={fund}
+            busy={fundBusy}
+            onRun={() => runFundamental(true)}
+          >
+            <FinancialsTable data={fin} />
+          </TechnicalPanel>
 
           <div className="grid gap-4 md:grid-cols-2">
             <Panel title="Data quality">
