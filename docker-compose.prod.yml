@@ -1,0 +1,74 @@
+# Production overrides (Phase 14). Requires Docker Compose v2.24+ (!reset).
+#   cp .env.example .env   # fill in the production section
+#   docker compose -f docker-compose.yml -f docker-compose.prod.yml run --rm backend python -m app.cli check-deploy
+#   docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d --build
+# Only Caddy is reachable from outside (80/443, automatic TLS). Postgres,
+# Redis, the API and the UI publish no ports. Live trading stays disabled.
+x-prod-env: &prod-env
+  AEGIS_ENV: production
+  DATABASE_URL: postgresql+psycopg://aegis:${POSTGRES_PASSWORD}@postgres:5432/aegis
+  REDIS_URL: redis://:${REDIS_PASSWORD:?set REDIS_PASSWORD in .env}@redis:6379/0
+
+services:
+  postgres:
+    ports: !reset []
+    restart: unless-stopped
+
+  redis:
+    command: ["sh", "-c", "exec redis-server --requirepass \"$$REDIS_PASSWORD\" --appendonly yes"]
+    environment:
+      REDIS_PASSWORD: ${REDIS_PASSWORD:?set REDIS_PASSWORD in .env}
+    healthcheck:
+      test: ["CMD-SHELL", "REDISCLI_AUTH=\"$$REDIS_PASSWORD\" redis-cli ping | grep -q PONG"]
+      interval: 5s
+      retries: 10
+    volumes: [redisdata:/data]
+    ports: !reset []
+    restart: unless-stopped
+
+  backend:
+    environment:
+      <<: *prod-env
+      AEGIS_API_HOST: ${AEGIS_API_HOST:?set AEGIS_API_HOST in .env}
+      # Caddy is the only way in; the client address is the X-Forwarded-For
+      # entry Caddy appends (never a client-sent one) for per-client limits.
+      AEGIS_TRUSTED_PROXY_HOPS: "1"
+    command: >-
+      sh -c "alembic upgrade head &&
+      exec uvicorn app.main:app --host 0.0.0.0 --port 8000 --no-server-header"
+    healthcheck:
+      test: ["CMD-SHELL", "python -c \"import os,urllib.request as u; u.urlopen(u.Request('http://127.0.0.1:8000/health', headers={'Host': os.environ['AEGIS_API_HOST']}), timeout=5)\""]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    ports: !reset []
+    restart: unless-stopped
+
+  worker:
+    environment: *prod-env
+    restart: unless-stopped
+
+  frontend:
+    build:
+      args:
+        NEXT_PUBLIC_AEGIS_API_URL: https://${AEGIS_API_HOST:?set AEGIS_API_HOST in .env}
+    ports: !reset []
+    restart: unless-stopped
+
+  caddy:
+    image: caddy:2-alpine
+    environment:
+      AEGIS_UI_HOST: ${AEGIS_UI_HOST:?set AEGIS_UI_HOST in .env}
+      AEGIS_API_HOST: ${AEGIS_API_HOST:?set AEGIS_API_HOST in .env}
+    ports: ["80:80", "443:443"]
+    volumes:
+      - ./deploy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on: [backend, frontend]
+    restart: unless-stopped
+
+volumes:
+  redisdata:
+  caddy_data:
+  caddy_config:

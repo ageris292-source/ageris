@@ -434,6 +434,23 @@ class MonitoringRules(_Strict):
         return self
 
 
+class SecurityRules(_Strict):
+    rate_limit_window_seconds: Annotated[int, Field(ge=1, le=3600)]
+    rate_limit_requests: Annotated[int, Field(ge=1, le=100_000)]
+    rate_limit_writes: Annotated[int, Field(ge=1, le=100_000)]
+    rate_limit_exempt_paths: list[str]
+    max_request_bytes: Annotated[int, Field(ge=1024, le=100 * 1024 * 1024)]
+    hsts_max_age_seconds: Annotated[int, Field(ge=0, le=2 * 365 * 86_400)]
+
+    @model_validator(mode="after")
+    def _consistent(self) -> Self:
+        if self.rate_limit_writes > self.rate_limit_requests:
+            raise ValueError("security.rate_limit_writes must be <= rate_limit_requests")
+        if any(not p.startswith("/") for p in self.rate_limit_exempt_paths):
+            raise ValueError("security.rate_limit_exempt_paths must be absolute paths")
+        return self
+
+
 class LightGbmParams(_Strict):
     n_estimators: Annotated[int, Field(ge=10, le=5000)]
     learning_rate: Annotated[float, Field(gt=0, le=1)]
@@ -479,6 +496,7 @@ class AegisConfig(_Strict):
     ranking: RankingRules
     alerts: AlertRules
     monitoring: MonitoringRules
+    security: SecurityRules
     transaction_costs: Annotated[dict[str, CostSchedule], Field(min_length=1)]
 
     @model_validator(mode="after")

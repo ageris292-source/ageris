@@ -25,7 +25,8 @@ of profit.
 | 11 | Paper trading: human approval, pre-order re-check, idempotent orders, fills, theses | **Done** ([report](docs/phase-11-report.md)) |
 | 12 | Daily ranking through the engine, no-trade analytics, counterfactuals, alerts (in-app, Telegram, email) | **Done** ([report](docs/phase-12-report.md)) |
 | 13 | Model monitoring: PSI drift vs training data (null-calibrated), calibration decay on realised outcomes, auto-disable | **Done** ([report](docs/phase-13-report.md)) |
-| 14–15 | Security/deploy, live scaffolding | In progress |
+| 14 | Security: global rate limits, request size limit, security headers, CORS fixes, production config checks; deployment (Caddy/TLS compose, runbook) | **Done** ([report](docs/phase-14-report.md), [deployment guide](docs/deployment.md)) |
+| 15 | Live-trading scaffolding (stays disabled) | In progress |
 
 Market scope: **Indian equities only** (NSE `.NS`, BSE `.BO`).
 
@@ -57,6 +58,12 @@ docker compose exec backend python -m app.cli create-user --email you@example.co
 - API: http://localhost:8000 (OpenAPI docs at `/docs`)
 - UI: http://localhost:3000
 
+## Production
+
+See **[docs/deployment.md](docs/deployment.md)**: `docker-compose.prod.yml` (Caddy with
+automatic TLS; database and Redis not exposed), the startup safety checks for
+`AEGIS_ENV=production`, and `python -m app.cli check-deploy`.
+
 ## Local development
 
 ```bash
@@ -78,7 +85,7 @@ Redis DB 15):
 
 ```bash
 cd backend
-../.venv/bin/pytest            # 332 tests
+../.venv/bin/pytest            # 342 tests
 ../.venv/bin/ruff check . && ../.venv/bin/ruff format --check . && ../.venv/bin/mypy app
 ```
 

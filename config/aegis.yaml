@@ -311,6 +311,18 @@ monitoring:
   max_calibration_decay: 0.05            # live ECE - backtest ECE above this -> FAIL
   auto_disable: true                     # retire the model on FAIL
 
+# HTTP hardening (Phase 14). Limits are per client: the socket peer, or the
+# X-Forwarded-For entry appended by a trusted reverse proxy (the number of
+# proxy hops is deployment topology: AEGIS_TRUSTED_PROXY_HOPS). The limiter
+# fails closed: if Redis is down, requests are refused (503), except health.
+security:
+  rate_limit_window_seconds: 60
+  rate_limit_requests: 300               # every request
+  rate_limit_writes: 60                  # POST/PUT/DELETE (analysis, backtests, orders...)
+  rate_limit_exempt_paths: ["/health"]
+  max_request_bytes: 6291456             # 6 MiB (CSV imports are capped at 5 MiB)
+  hsts_max_age_seconds: 31536000         # sent in production only (TLS terminated upstream)
+
 # Walk-forward backtesting and the probability model (Phase 10).
 # Horizons are in trading days. Labels start at the NEXT session's close
 # (a signal at close t can only be traded after t), so no same-bar fills.
