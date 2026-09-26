@@ -163,6 +163,147 @@ class TechnicalRules(_Strict):
         return self
 
 
+class FundamentalRules(_Strict):
+    quarterly_publication_lag_days: Annotated[int, Field(ge=0, le=180)]
+    annual_publication_lag_days: Annotated[int, Field(ge=0, le=365)]
+    min_annual_periods: Annotated[int, Field(ge=1, le=20)]
+    margin_deterioration_pts: Annotated[float, Field(gt=0, lt=1)]
+    weak_cash_conversion: Annotated[float, Field(gt=0, le=2)]
+    max_debt_to_equity: Annotated[float, Field(gt=0, le=20)]
+    min_interest_coverage: Annotated[float, Field(gt=0, le=100)]
+    strong_growth: Annotated[float, Field(gt=0, lt=5)]
+    high_roe: Annotated[float, Field(gt=0, lt=5)]
+    high_roce: Annotated[float, Field(gt=0, lt=5)]
+    expensive_pe: Annotated[float, Field(gt=0, le=500)]
+    cheap_pe: Annotated[float, Field(gt=0, le=500)]
+    peer_groups: dict[str, list[str]] = Field(default_factory=dict)
+    financial_sector_groups: list[str] = Field(default_factory=list)
+    min_growth_for_peg: Annotated[float, Field(gt=0, lt=1)] = 0.05
+    category_weights: dict[
+        Literal["growth", "profitability", "balance_sheet", "cash_quality", "valuation"],
+        Annotated[float, Field(ge=0, le=1)],
+    ]
+
+    @model_validator(mode="after")
+    def _consistent(self) -> Self:
+        if self.cheap_pe >= self.expensive_pe:
+            raise ValueError("fundamentals.cheap_pe must be below expensive_pe")
+        unknown = set(self.financial_sector_groups) - set(self.peer_groups)
+        if unknown:
+            raise ValueError(f"financial_sector_groups not in peer_groups: {sorted(unknown)}")
+        if abs(sum(self.category_weights.values()) - 1.0) > 1e-9:
+            raise ValueError("fundamentals.category_weights must sum to 1")
+        return self
+
+
+EVENT_TYPES = (
+    "earnings_beat",
+    "earnings_miss",
+    "results",
+    "regulatory",
+    "lawsuit",
+    "acquisition",
+    "management_change",
+    "dividend_buyback",
+    "product_launch",
+    "rating_change",
+    "sector",
+    "other",
+)
+
+
+class NewsRules(_Strict):
+    provider_enabled: bool
+    max_items_per_fetch: Annotated[int, Field(ge=1, le=200)]
+    sentiment_model: str
+    embedding_model: str
+    embedding_dim: Annotated[int, Field(ge=8, le=4096)]
+    duplicate_similarity: Annotated[float, Field(gt=0.5, lt=1.0)]
+    duplicate_window_hours: Annotated[int, Field(ge=1, le=720)]
+    lookback_days: Annotated[int, Field(ge=1, le=365)]
+    recency_half_life_days: Annotated[float, Field(gt=0, le=90)]
+    min_items_for_score: Annotated[int, Field(ge=1, le=100)]
+    contradiction_window_days: Annotated[int, Field(ge=1, le=60)]
+    chunk_chars: Annotated[int, Field(ge=200, le=8000)]
+    chunk_overlap: Annotated[int, Field(ge=0, le=2000)]
+    retrieval_top_k: Annotated[int, Field(ge=1, le=50)]
+    importance: dict[str, Annotated[float, Field(gt=0, le=1)]]
+
+    @model_validator(mode="after")
+    def _consistent(self) -> Self:
+        if self.chunk_overlap >= self.chunk_chars:
+            raise ValueError("news.chunk_overlap must be smaller than chunk_chars")
+        if self.embedding_dim != 384:
+            # The pgvector column width is fixed by migration 0005.
+            raise ValueError("news.embedding_dim must be 384 (schema column width)")
+        missing = set(EVENT_TYPES) - set(self.importance)
+        extra = set(self.importance) - set(EVENT_TYPES)
+        if missing or extra:
+            raise ValueError(f"news.importance keys mismatch: missing={missing} extra={extra}")
+        return self
+
+
+class MacroRules(_Strict):
+    world_bank_indicators: dict[str, str]
+    world_bank_publication_lag_days: Annotated[int, Field(ge=0, le=730)]
+    market_series: dict[str, str]
+    benchmark: str
+    history_days: Annotated[int, Field(ge=300, le=4000)]
+    rbi_inflation_target: Annotated[float, Field(gt=0, lt=0.2)]
+    change_window_sessions: Annotated[int, Field(ge=5, le=260)]
+    vix_high: Annotated[float, Field(gt=0, le=100)]
+    vix_low: Annotated[float, Field(gt=0, le=100)]
+    trend_band: Annotated[float, Field(ge=0, lt=0.2)]
+    sector_sensitivities: dict[str, dict[str, Annotated[float, Field(ge=-1, le=1)]]]
+    default_sensitivities: dict[str, Annotated[float, Field(ge=-1, le=1)]]
+
+    @model_validator(mode="after")
+    def _consistent(self) -> Self:
+        if self.benchmark not in self.market_series:
+            raise ValueError("macro.benchmark must be one of macro.market_series")
+        if self.vix_low >= self.vix_high:
+            raise ValueError("macro.vix_low must be below vix_high")
+        known = set(self.market_series) | set(self.world_bank_indicators) | {"repo_rate"}
+        for sector, sens in {
+            **self.sector_sensitivities,
+            "default": self.default_sensitivities,
+        }.items():
+            unknown = set(sens) - known
+            if unknown:
+                raise ValueError(f"macro sensitivities for {sector} use unknown series {unknown}")
+        return self
+
+
+class ScenarioRates(_Strict):
+    bear: Annotated[float, Field(ge=0, lt=0.15)]
+    base: Annotated[float, Field(ge=0, lt=0.15)]
+    bull: Annotated[float, Field(ge=0, lt=0.15)]
+
+
+class ValuationRules(_Strict):
+    risk_free_rate: Annotated[float, Field(gt=0, lt=0.3)]
+    equity_risk_premium: Annotated[float, Field(gt=0, lt=0.2)]
+    projection_years: Annotated[int, Field(ge=3, le=15)]
+    terminal_growth: ScenarioRates
+    growth_spread: Annotated[float, Field(ge=0, lt=0.5)]
+    wacc_spread: Annotated[float, Field(ge=0, lt=0.1)]
+    min_growth: Annotated[float, Field(gt=-0.5, lt=0)]
+    max_growth: Annotated[float, Field(gt=0, lt=1)]
+    beta_lookback_weeks: Annotated[int, Field(ge=26, le=520)]
+    beta_bounds: tuple[float, float]
+    mos_scale: Annotated[float, Field(gt=0, le=2)]
+
+    @model_validator(mode="after")
+    def _consistent(self) -> Self:
+        tg = self.terminal_growth
+        if not tg.bear <= tg.base <= tg.bull:
+            raise ValueError("valuation.terminal_growth must satisfy bear <= base <= bull")
+        lo, hi = self.beta_bounds
+        if not 0 < lo < hi:
+            raise ValueError("valuation.beta_bounds must be 0 < low < high")
+        return self
+
+
 class CostSchedule(_Strict):
     brokerage_bps: Bps
     exchange_fee_bps: Bps
@@ -176,6 +317,163 @@ class CostSchedule(_Strict):
     annual_financing_rate: Annotated[float, Field(ge=0.0, lt=1.0)]
 
 
+class RiskAnalysisRules(_Strict):
+    lookback_sessions: Annotated[int, Field(ge=60, le=2520)]
+    min_history_sessions: Annotated[int, Field(ge=30, le=2520)]
+    trading_days_per_year: Annotated[int, Field(ge=200, le=366)]
+    var_confidence: Annotated[list[Annotated[float, Field(gt=0.5, lt=1)]], Field(min_length=1)]
+    low_volatility: Annotated[float, Field(gt=0, lt=2)]
+    high_volatility: Annotated[float, Field(gt=0, lt=3)]
+    high_beta: Annotated[float, Field(gt=0, lt=5)]
+    low_beta: Annotated[float, Field(ge=0, lt=5)]
+    drawdown_warning: Annotated[float, Field(gt=0, lt=1)]
+    adv_window_sessions: Annotated[int, Field(ge=5, le=260)]
+    high_correlation: Annotated[float, Field(gt=0, lt=1)]
+    max_effective_positions_floor: Annotated[int, Field(ge=1, le=100)]
+    category_weights: dict[str, Annotated[float, Field(gt=0, le=1)]]
+    portfolio_fit_weights: dict[str, Annotated[float, Field(gt=0, le=1)]]
+
+    @model_validator(mode="after")
+    def _consistent(self) -> Self:
+        for name, w in (
+            ("category_weights", self.category_weights),
+            ("portfolio_fit_weights", self.portfolio_fit_weights),
+        ):
+            if abs(sum(w.values()) - 1) > 1e-6:
+                raise ValueError(f"risk_analysis.{name} must sum to 1")
+        if self.min_history_sessions > self.lookback_sessions:
+            raise ValueError("risk_analysis.min_history_sessions must be <= lookback_sessions")
+        if self.low_volatility >= self.high_volatility:
+            raise ValueError("risk_analysis.low_volatility must be below high_volatility")
+        if self.low_beta >= self.high_beta:
+            raise ValueError("risk_analysis.low_beta must be below high_beta")
+        return self
+
+
+AGENT_NAMES = ("technical", "fundamental", "valuation", "risk", "news", "macro", "portfolio")
+
+
+class OrchestratorRules(_Strict):
+    agent_weights: dict[str, Annotated[float, Field(gt=0, le=1)]]
+    required_agents: list[str]
+    min_agents_ok: Annotated[int, Field(ge=1, le=7)]
+    stance_band: Annotated[float, Field(gt=0, lt=50)]
+    conflict_gap: Annotated[float, Field(gt=0, le=100)]
+    max_case_points: Annotated[int, Field(ge=1, le=20)]
+    conflict_confidence_penalty: Annotated[float, Field(ge=0, lt=1)]
+
+    @model_validator(mode="after")
+    def _consistent(self) -> Self:
+        unknown = (set(self.agent_weights) | set(self.required_agents)) - set(AGENT_NAMES)
+        if unknown:
+            raise ValueError(f"orchestrator references unknown agents {sorted(unknown)}")
+        if abs(sum(self.agent_weights.values()) - 1) > 1e-6:
+            raise ValueError("orchestrator.agent_weights must sum to 1")
+        return self
+
+
+class TradeEngineRules(_Strict):
+    cost_schedule: str
+    max_report_age_hours: Annotated[float, Field(gt=0, le=24 * 30)]
+    required_stance: Literal["POSITIVE_TILT"]
+    max_agent_conflicts: Annotated[int, Field(ge=0, le=10)]
+    benchmark_expected_annual_return: Annotated[float, Field(ge=0, lt=0.5)]
+    min_holding_days: Annotated[int, Field(ge=1, le=365)]
+    max_holding_days: Annotated[int, Field(ge=1, le=3650)]
+    max_order_value_fraction: Annotated[float, Field(gt=0, le=1)]
+
+    @model_validator(mode="after")
+    def _consistent(self) -> Self:
+        if self.min_holding_days > self.max_holding_days:
+            raise ValueError("trade_engine.min_holding_days must be <= max_holding_days")
+        return self
+
+
+class PaperTradingRules(_Strict):
+    approver_role: Literal["admin"]
+    max_decision_age_minutes: Annotated[int, Field(ge=1, le=24 * 60)]
+    fill_model: Literal["reference_close_plus_costs"]
+
+
+class RankingRules(_Strict):
+    horizon: Annotated[int, Field(ge=1, le=250)]
+    stop_atr_multiple: Annotated[float, Field(gt=0, le=10)]
+    min_stop_fraction: Annotated[float, Field(gt=0, lt=0.5)]
+    target_reward_multiple: Annotated[float, Field(ge=1, le=20)]
+    refresh_reports: bool
+    top_n: Annotated[int, Field(ge=1, le=500)]
+
+
+class AlertRules(_Strict):
+    telegram_enabled: bool
+    email_enabled: bool
+    min_severity_to_push: Literal["info", "warning", "critical"]
+
+
+class MonitoringRules(_Strict):
+    psi_bins: Annotated[int, Field(ge=4, le=50)]
+    psi_warn: Annotated[float, Field(gt=0, le=1)]
+    psi_fail: Annotated[float, Field(gt=0, le=2)]
+    min_drifted_features_to_fail: Annotated[int, Field(ge=1, le=50)]
+    drift_window_sessions: Annotated[int, Field(ge=1, le=250)]
+    min_drift_samples: Annotated[int, Field(ge=10, le=100_000)]
+    calibration_window_predictions: Annotated[int, Field(ge=20, le=100_000)]
+    min_matured_predictions: Annotated[int, Field(ge=10, le=100_000)]
+    max_live_calibration_error: Fraction
+    max_calibration_decay: Fraction
+    auto_disable: bool
+
+    @model_validator(mode="after")
+    def _consistent(self) -> Self:
+        if self.psi_warn >= self.psi_fail:
+            raise ValueError("monitoring.psi_warn must be below psi_fail")
+        if self.min_matured_predictions > self.calibration_window_predictions:
+            raise ValueError(
+                "monitoring.min_matured_predictions must be <= calibration_window_predictions"
+            )
+        return self
+
+
+class SecurityRules(_Strict):
+    rate_limit_window_seconds: Annotated[int, Field(ge=1, le=3600)]
+    rate_limit_requests: Annotated[int, Field(ge=1, le=100_000)]
+    rate_limit_writes: Annotated[int, Field(ge=1, le=100_000)]
+    rate_limit_exempt_paths: list[str]
+    max_request_bytes: Annotated[int, Field(ge=1024, le=100 * 1024 * 1024)]
+    hsts_max_age_seconds: Annotated[int, Field(ge=0, le=2 * 365 * 86_400)]
+
+    @model_validator(mode="after")
+    def _consistent(self) -> Self:
+        if self.rate_limit_writes > self.rate_limit_requests:
+            raise ValueError("security.rate_limit_writes must be <= rate_limit_requests")
+        if any(not p.startswith("/") for p in self.rate_limit_exempt_paths):
+            raise ValueError("security.rate_limit_exempt_paths must be absolute paths")
+        return self
+
+
+class LightGbmParams(_Strict):
+    n_estimators: Annotated[int, Field(ge=10, le=5000)]
+    learning_rate: Annotated[float, Field(gt=0, le=1)]
+    num_leaves: Annotated[int, Field(ge=2, le=1024)]
+    min_child_samples: Annotated[int, Field(ge=1, le=10000)]
+    subsample: Annotated[float, Field(gt=0, le=1)]
+    colsample_bytree: Annotated[float, Field(gt=0, le=1)]
+    reg_lambda: Annotated[float, Field(ge=0, le=100)]
+
+
+class BacktestRules(_Strict):
+    horizons: Annotated[list[Annotated[int, Field(ge=1, le=250)]], Field(min_length=1)]
+    min_train_sessions: Annotated[int, Field(ge=100, le=5000)]
+    test_fold_sessions: Annotated[int, Field(ge=5, le=500)]
+    embargo_sessions: Annotated[int, Field(ge=0, le=250)]
+    calibration_fraction: Annotated[float, Field(gt=0, lt=0.5)]
+    calibration_bins: Annotated[int, Field(ge=5, le=50)]
+    min_train_samples: Annotated[int, Field(ge=100)]
+    seed: int
+    top_k: Annotated[int, Field(ge=1, le=100)]
+    lightgbm: LightGbmParams
+
+
 class AegisConfig(_Strict):
     config_version: Annotated[str, Field(min_length=1)]
     trade_gates: TradeGateThresholds
@@ -186,7 +484,28 @@ class AegisConfig(_Strict):
     execution: ExecutionRules
     market_data: MarketDataRules
     technical: TechnicalRules
+    fundamentals: FundamentalRules
+    news: NewsRules
+    macro: MacroRules
+    valuation: ValuationRules
+    risk_analysis: RiskAnalysisRules
+    orchestrator: OrchestratorRules
+    trade_engine: TradeEngineRules
+    backtest: BacktestRules
+    paper_trading: PaperTradingRules
+    ranking: RankingRules
+    alerts: AlertRules
+    monitoring: MonitoringRules
+    security: SecurityRules
     transaction_costs: Annotated[dict[str, CostSchedule], Field(min_length=1)]
+
+    @model_validator(mode="after")
+    def _cross_section(self) -> Self:
+        if self.ranking.horizon not in self.backtest.horizons:
+            raise ValueError("ranking.horizon must be one of backtest.horizons")
+        if self.trade_engine.cost_schedule not in self.transaction_costs:
+            raise ValueError("trade_engine.cost_schedule must name a transaction_costs schedule")
+        return self
 
     def fingerprint(self) -> str:
         """Stable SHA-256 of the effective configuration, recorded in audits."""
