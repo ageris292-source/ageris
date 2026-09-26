@@ -196,6 +196,53 @@ class FundamentalRules(_Strict):
         return self
 
 
+EVENT_TYPES = (
+    "earnings_beat",
+    "earnings_miss",
+    "results",
+    "regulatory",
+    "lawsuit",
+    "acquisition",
+    "management_change",
+    "dividend_buyback",
+    "product_launch",
+    "rating_change",
+    "sector",
+    "other",
+)
+
+
+class NewsRules(_Strict):
+    provider_enabled: bool
+    max_items_per_fetch: Annotated[int, Field(ge=1, le=200)]
+    sentiment_model: str
+    embedding_model: str
+    embedding_dim: Annotated[int, Field(ge=8, le=4096)]
+    duplicate_similarity: Annotated[float, Field(gt=0.5, lt=1.0)]
+    duplicate_window_hours: Annotated[int, Field(ge=1, le=720)]
+    lookback_days: Annotated[int, Field(ge=1, le=365)]
+    recency_half_life_days: Annotated[float, Field(gt=0, le=90)]
+    min_items_for_score: Annotated[int, Field(ge=1, le=100)]
+    contradiction_window_days: Annotated[int, Field(ge=1, le=60)]
+    chunk_chars: Annotated[int, Field(ge=200, le=8000)]
+    chunk_overlap: Annotated[int, Field(ge=0, le=2000)]
+    retrieval_top_k: Annotated[int, Field(ge=1, le=50)]
+    importance: dict[str, Annotated[float, Field(gt=0, le=1)]]
+
+    @model_validator(mode="after")
+    def _consistent(self) -> Self:
+        if self.chunk_overlap >= self.chunk_chars:
+            raise ValueError("news.chunk_overlap must be smaller than chunk_chars")
+        if self.embedding_dim != 384:
+            # The pgvector column width is fixed by migration 0005.
+            raise ValueError("news.embedding_dim must be 384 (schema column width)")
+        missing = set(EVENT_TYPES) - set(self.importance)
+        extra = set(self.importance) - set(EVENT_TYPES)
+        if missing or extra:
+            raise ValueError(f"news.importance keys mismatch: missing={missing} extra={extra}")
+        return self
+
+
 class CostSchedule(_Strict):
     brokerage_bps: Bps
     exchange_fee_bps: Bps
@@ -220,6 +267,7 @@ class AegisConfig(_Strict):
     market_data: MarketDataRules
     technical: TechnicalRules
     fundamentals: FundamentalRules
+    news: NewsRules
     transaction_costs: Annotated[dict[str, CostSchedule], Field(min_length=1)]
 
     def fingerprint(self) -> str:

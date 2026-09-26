@@ -5,7 +5,7 @@
 # being relied on (spec §26, §73). The file is validated strictly at startup:
 # unknown keys, out-of-range values and inconsistent limits abort boot.
 
-config_version: "2026.09.4"
+config_version: "2026.09.5"
 
 trade_gates:
   minimum_expected_net_return: 0.05      # 5% net of all modelled costs
@@ -132,6 +132,36 @@ fundamentals:
     balance_sheet: 0.20
     cash_quality: 0.15
     valuation: 0.15
+
+# News agent + document retrieval (Phase 5).
+news:
+  provider_enabled: true                 # Google News RSS search (unlicensed, headlines only)
+  max_items_per_fetch: 60
+  sentiment_model: ProsusAI/finbert
+  embedding_model: sentence-transformers/all-MiniLM-L6-v2
+  embedding_dim: 384
+  duplicate_similarity: 0.90             # cosine similarity above which two headlines are the same story
+  duplicate_window_hours: 72
+  lookback_days: 30                      # news older than this at as_of is ignored by the agent
+  recency_half_life_days: 5
+  min_items_for_score: 3
+  contradiction_window_days: 7
+  chunk_chars: 1200
+  chunk_overlap: 200
+  retrieval_top_k: 5
+  importance:                            # relative weight of an event type in the news score
+    earnings_beat: 1.0
+    earnings_miss: 1.0
+    results: 0.8
+    regulatory: 0.9
+    lawsuit: 0.8
+    acquisition: 0.8
+    management_change: 0.7
+    dividend_buyback: 0.5
+    product_launch: 0.5
+    rating_change: 0.6
+    sector: 0.4
+    other: 0.3
 
 # Transaction-cost schedules, expressed in basis points of traded value.
 # The example NSE schedule below MUST be checked against the current

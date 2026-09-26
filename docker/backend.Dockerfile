@@ -5,7 +5,9 @@ WORKDIR /app/backend
 
 COPY backend/pyproject.toml ./
 COPY backend/app ./app
-RUN pip install .
+# CPU-only torch for FinBERT / sentence embeddings (the [ml] extra).
+RUN pip install torch --index-url https://download.pytorch.org/whl/cpu \
+ && pip install ".[ml]"
 
 COPY backend/alembic.ini ./
 COPY backend/alembic ./alembic

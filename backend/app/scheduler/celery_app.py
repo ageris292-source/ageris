@@ -30,6 +30,16 @@ celery_app.conf.update(
         "heartbeat": {"task": "aegis.heartbeat", "schedule": 300.0},
         # 17:15 IST (11:45 UTC) Mon-Fri: after the 15:30 close plus the
         # configured availability lag. Holidays are skipped by the calendar.
+        # Every 2 hours, 08:30-18:30 IST on weekdays.
+        "refresh-news": {
+            "task": "aegis.refresh_news",
+            "schedule": crontab(minute=0, hour="3,5,7,9,11,13", day_of_week="mon-fri"),
+        },
+        # Financial statements change quarterly; weekly is plenty.
+        "refresh-fundamentals": {
+            "task": "aegis.refresh_fundamentals",
+            "schedule": crontab(minute=30, hour=2, day_of_week="sat"),
+        },
         "refresh-eod-prices": {
             "task": "aegis.refresh_eod_prices",
             "schedule": crontab(minute=45, hour=11, day_of_week="mon-fri"),
@@ -71,3 +81,40 @@ def refresh_eod_prices() -> dict[str, object]:
                 db.rollback()
                 results[str(service.ticker_of(stock))] = f"error: {exc.__class__.__name__}"
     return {"at": now.isoformat(), "results": results}
+
+
+def _for_each_stock(label: str, fn: object) -> dict[str, object]:
+    from sqlalchemy import select
+
+    from app.db.session import _session_factory
+    from app.market_data.service import ticker_of
+    from app.models import Stock
+
+    results: dict[str, str] = {}
+    with _session_factory()() as db:
+        for stock in db.scalars(select(Stock).where(Stock.is_active)).all():
+            try:
+                run = fn(db, stock)  # type: ignore[operator]
+                results[str(ticker_of(stock))] = run.status
+            except Exception as exc:  # isolate per-stock failures
+                db.rollback()
+                results[str(ticker_of(stock))] = f"error: {exc.__class__.__name__}"
+    return {"job": label, "at": datetime.now(UTC).isoformat(), "results": results}
+
+
+@celery_app.task(name="aegis.refresh_news")  # type: ignore[untyped-decorator]
+def refresh_news() -> dict[str, object]:
+    from app.news import service as ns
+
+    provider = ns.build_news_provider()
+    return _for_each_stock("news", lambda db, s: ns.ingest_news(db, s, provider, None))
+
+
+@celery_app.task(name="aegis.refresh_fundamentals")  # type: ignore[untyped-decorator]
+def refresh_fundamentals() -> dict[str, object]:
+    from app.fundamentals import service as fs
+
+    provider = fs.build_provider()
+    return _for_each_stock(
+        "fundamentals", lambda db, s: fs.ingest_from_yahoo(db, s, provider, None)
+    )

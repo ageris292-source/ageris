@@ -8,12 +8,14 @@ import { Nav } from "@/components/Nav";
 import { PriceChart } from "@/components/PriceChart";
 import { FreshnessBadge, QualityBadge } from "@/components/StatusBadge";
 import { FinancialsTable } from "@/components/FinancialsTable";
+import { NewsList } from "@/components/NewsList";
 import { TechnicalPanel } from "@/components/TechnicalPanel";
 import { useSession } from "@/components/useSession";
 import {
   api,
   type AgentOutput,
   type Financials,
+  type NewsItem,
   type Basis,
   type IndicatorSeries,
   type PriceSeries,
@@ -67,6 +69,9 @@ export default function StockPage() {
   const [fund, setFund] = useState<AgentOutput | null>(null);
   const [fin, setFin] = useState<Financials | null>(null);
   const [fundBusy, setFundBusy] = useState(false);
+  const [newsOut, setNewsOut] = useState<AgentOutput | null>(null);
+  const [news, setNews] = useState<NewsItem[] | null>(null);
+  const [newsBusy, setNewsBusy] = useState(false);
 
   const loadDetail = useCallback(async () => {
     try {
@@ -132,6 +137,33 @@ export default function StockPage() {
     },
     [guard, ticker],
   );
+
+  const runNews = useCallback(
+    async (fetchFirst: boolean) => {
+      setNewsBusy(true);
+      try {
+        if (fetchFirst) {
+          const run = await guard((t) => api.ingestNews(t, ticker));
+          if (run && run.status === "failed") setError(`News fetch failed: ${run.error}`);
+        }
+        const [items, out] = await Promise.all([
+          guard((t) => api.news(t, ticker)),
+          guard((t) => api.newsAgent(t, ticker)),
+        ]);
+        if (items) setNews(items);
+        if (out) setNewsOut(out);
+      } catch (err) {
+        setError(err instanceof Error ? err.message : "News analysis failed");
+      } finally {
+        setNewsBusy(false);
+      }
+    },
+    [guard, ticker],
+  );
+
+  useEffect(() => {
+    if (token && detail) void runNews(false);
+  }, [token, detail?.ticker, runNews]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     if (token && detail) void runFundamental(false);
@@ -306,6 +338,17 @@ export default function StockPage() {
             onRun={() => runFundamental(true)}
           >
             <FinancialsTable data={fin} />
+          </TechnicalPanel>
+
+          <TechnicalPanel
+            title="News"
+            scoreLabel="News sentiment"
+            runLabel="Fetch news & re-run"
+            out={newsOut}
+            busy={newsBusy}
+            onRun={() => runNews(true)}
+          >
+            <NewsList items={news} />
           </TechnicalPanel>
 
           <div className="grid gap-4 md:grid-cols-2">

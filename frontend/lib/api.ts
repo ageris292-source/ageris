@@ -213,6 +213,18 @@ export interface Financials {
   notice: string | null;
 }
 
+export interface NewsItem {
+  id: number;
+  title: string;
+  publisher: string | null;
+  url: string;
+  published_at: string | null;
+  event_type: string;
+  sentiment_label: "positive" | "negative" | "neutral" | null;
+  sentiment_score: number | null;
+  duplicate_of: number | null;
+}
+
 export class ApiError extends Error {
   constructor(public status: number, message: string) {
     super(message);
@@ -290,4 +302,10 @@ export const api = {
     request<Financials>(`/financials/${encodeURIComponent(ticker)}`, {}, token),
   ingestFinancials: (token: string, ticker: string) =>
     request<IngestionRun>(`/financials/${encodeURIComponent(ticker)}/ingest`, json({}), token),
+  news: (token: string, ticker: string) =>
+    request<NewsItem[]>(`/news/${encodeURIComponent(ticker)}?limit=30`, {}, token),
+  ingestNews: (token: string, ticker: string) =>
+    request<IngestionRun>(`/news/${encodeURIComponent(ticker)}/ingest`, json({}), token),
+  newsAgent: (token: string, ticker: string) =>
+    request<AgentOutput>(`/news-agent/${encodeURIComponent(ticker)}`, {}, token),
 };

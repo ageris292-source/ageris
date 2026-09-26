@@ -129,6 +129,9 @@ from app.models.market import (  # noqa: E402
     Stock,
 )
 
+# Phase 5 news + documents.
+from app.models.news import Document, DocumentChunk, NewsItem  # noqa: E402
+
 __all__ = [
     "AgentOutputRecord",
     "AgentRun",
@@ -136,7 +139,10 @@ __all__ = [
     "CorporateAction",
     "DataConflict",
     "DataIngestionRun",
+    "Document",
+    "DocumentChunk",
     "FinancialFact",
+    "NewsItem",
     "Price",
     "RiskEvent",
     "RiskEventSeverity",
