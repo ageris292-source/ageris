@@ -24,4 +24,4 @@ USER aegis
 EXPOSE 8000
 # AEGIS_PROCESS=worker runs Celery (worker + beat, exactly one replica);
 # otherwise the API. PORT is set by platforms such as Railway; 8000 otherwise.
-CMD ["sh", "-c", "if [ \"$AEGIS_PROCESS\" = worker ]; then exec celery -A app.scheduler.celery_app worker --beat --loglevel=info; else alembic upgrade head && exec uvicorn app.main:app --host 0.0.0.0 --port ${PORT:-8000} --no-server-header; fi"]
+CMD ["sh", "-c", "if [ \"$AEGIS_PROCESS\" = worker ]; then exec celery -A app.scheduler.celery_app worker --beat --loglevel=info --schedule=/tmp/celerybeat-schedule --pidfile=; else alembic upgrade head && exec uvicorn app.main:app --host 0.0.0.0 --port ${PORT:-8000} --no-server-header; fi"]
