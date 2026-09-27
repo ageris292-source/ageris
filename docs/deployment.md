@@ -161,10 +161,20 @@ Set `AEGIS_NSE_FEED=push` on `ageris` and `worker` so the scheduled direct downl
 Setup on the Mac, once:
 
 ```bash
-deploy/mac-feeder/aegis-nse-feed.sh 2021-09-27      # backfill ~5 years (first run)
-sed -e "s#REPO_PATH#$PWD#" -e "s#LOG_PATH#$HOME/Library/Logs/aegis-nse-feed.log#" \
-  deploy/mac-feeder/com.aegis.nse-feed.plist > ~/Library/LaunchAgents/com.aegis.nse-feed.plist
-launchctl load ~/Library/LaunchAgents/com.aegis.nse-feed.plist
+deploy/mac-feeder/aegis-nse-feed.sh 2021-09-27                      # backfill ~5 years (first run)
+deploy/mac-feeder/install-feeder.sh <railway-project-id>            # daily schedule
 ```
 
-The job then runs at 19:10 IST, Monday to Friday. Each run re-sends the last 14 days, and re-sending is idempotent, so a missed evening is filled in by the next run. If the Mac was asleep at 19:10, launchd runs the job when it wakes. The worker's paper, ranking and monitoring jobs run from 19:30 IST. Remove the schedule with `launchctl unload ~/Library/LaunchAgents/com.aegis.nse-feed.plist`.
+macOS does not let background jobs read `~/Documents`, `~/Desktop` or `~/Downloads`. The installer therefore copies the backend code, config and feeder script to `~/Library/Application Support/aegis-feeder`, creates a virtualenv there, and links the Railway project for that folder. Re-run the installer after changing the code.
+
+The job runs at 19:10 IST, Monday to Friday, and each run re-sends the last 14 days. Re-sending is idempotent, so a missed evening is filled in by the next run. If the Mac was asleep at 19:10, launchd runs the job when it wakes. The log is `~/Library/Logs/aegis-nse-feed.log`. The worker's paper, ranking and monitoring jobs run from 19:30 IST.
+
+To remove the schedule:
+
+```bash
+launchctl unload ~/Library/LaunchAgents/com.aegis.nse-feed.plist
+```
+
+Known gaps:
+- **Renamed or newly listed symbols** (e.g. ZOMATO → ETERNAL, the Tata Motors demerger) have history only under the current symbol.
+- **Yahoo fundamentals** can be missing for single stocks (INFY.NS returned none). This is recorded as a failed run, never filled in.
