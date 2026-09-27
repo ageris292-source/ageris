@@ -308,3 +308,63 @@ def test_cli_module_entry_point_runs() -> None:
         check=False,
     )
     assert r.returncode == 1 and "FAIL AEGIS_ENV" in r.stdout, r.stderr[-500:]
+
+
+def test_feeder_bundle_serves_an_offline_ingest(db: Session, tmp_path: Path) -> None:
+    import tarfile
+
+    days = CAL.sessions(date(2024, 10, 21), date(2024, 10, 31))
+    files = {
+        d: udiff(
+            d,
+            [
+                ("RELIANCE", "EQ", 2700.0 if d < date(2024, 10, 28) else 1340.0, 1_000_000),
+                ("TCS", "EQ", 4000.0, 10),
+                ("OTHER", "EQ", 10.0, 1),
+            ],
+        )
+        for d in days
+    }
+    now = CAL.session_close_utc(days[-1]) + timedelta(hours=2)
+    # on the feeder machine (NSE reachable)
+    t, _ = transport(files)
+    feeder = provider(t, tmp_path / "mac-cache")
+    feeder.prefetch(["RELIANCE", "TCS"], days[0], days[-1], now)
+    info = feeder.write_bundle(tmp_path / "b.tar.gz", ["RELIANCE", "TCS"], days[0], days[-1], now)
+    assert info == {"days": len(days), "action_files": 2, "symbols": 2}
+    # on the deployment (NSE blocked): unpack, ingest offline, no network at all
+    dest = tmp_path / "railway"
+    with tarfile.open(tmp_path / "b.tar.gz") as tar:
+        tar.extractall(dest, filter="data")
+    day0 = json.loads((dest / f"{days[0]:%Y%m%d}.json").read_text())
+    assert set(day0) == {"RELIANCE", "TCS"}  # filtered to the tracked stocks
+
+    def no_network(req: httpx.Request) -> httpx.Response:
+        raise AssertionError(f"offline provider contacted {req.url}")
+
+    offline = NseBhavcopyProvider(
+        SETTINGS,
+        CAL,
+        timedelta(minutes=60),
+        cache_dir=dest,
+        transport=httpx.MockTransport(no_network),
+        offline=True,
+    )
+    stocks = [md.add_stock(db, Ticker.parse(x), None) for x in ("RELIANCE.NS", "TCS.NS", "INFY.NS")]
+    res = md.ingest_nse(db, stocks, days[0], days[-1], now=now, provider=offline)
+    assert res["RELIANCE.NS"].startswith("succeeded") and res["TCS.NS"].startswith("succeeded")
+    assert res["INFY.NS"] == "failed"  # not in the bundle: no actions -> no unadjusted prices
+    adj = md.get_series(db, stocks[0], PriceBasis.SPLIT_ADJUSTED, days[0], days[-1], as_of=now)
+    assert float(adj.bars[0].bar.close) == pytest.approx(1350.0)  # bonus applied offline
+    with pytest.raises(ProviderUnavailableError):
+        offline.prefetch(["TCS"], days[0], days[-1], now)
+
+
+def test_push_mode_skips_the_direct_download(monkeypatch: pytest.MonkeyPatch) -> None:
+    from app.core import settings as settings_mod
+    from app.scheduler import celery_app
+
+    pushed = settings_mod.get_settings().model_copy(update={"nse_feed": "push"})
+    monkeypatch.setattr(settings_mod, "get_settings", lambda: pushed)
+    out = celery_app.refresh_nse_eod()
+    assert "skipped" in out and "feeder" in str(out["skipped"])

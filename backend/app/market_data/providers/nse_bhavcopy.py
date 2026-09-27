@@ -200,7 +200,13 @@ class NseBhavcopyProvider:
         cache_dir: Path | None = None,
         transport: httpx.BaseTransport | None = None,
         sleep: Callable[[float], None] = time.sleep,
+        offline: bool = False,
     ) -> None:
+        """offline: use only files already in `cache_dir` (supplied by a feeder
+        on a machine NSE does not block); never contact NSE."""
+        if offline and cache_dir is None:
+            raise ValueError("offline mode needs a cache_dir")
+        self.offline = offline
         self.settings = settings
         self.licensed = settings.licensed
         self.calendar = calendar
@@ -269,6 +275,9 @@ class NseBhavcopyProvider:
                 )
                 for s, v in raw.items()
             }
+        elif self.offline:
+            self._memo[session] = None  # not supplied by the feeder
+            return None
         else:
             content = self._download(session)
             if self.settings.request_interval_seconds:
@@ -300,6 +309,61 @@ class NseBhavcopyProvider:
         self._memo[session] = rows
         return rows
 
+    # -- feeder ------------------------------------------------------------------
+
+    def prefetch(self, symbols: list[str], start: date, end: date, now: datetime) -> dict[str, int]:
+        """Download (or reuse) every daily file and each symbol's corporate
+        actions for [start, end] into cache_dir. Returns counts."""
+        if self.offline:
+            raise ProviderUnavailableError("cannot prefetch in offline mode")
+        today = (now + timedelta(hours=5, minutes=30)).date()
+        days = [
+            s
+            for s in self.calendar.sessions(start, end)
+            if self.calendar.session_close_utc(s) + self.lag <= now
+        ]
+        got = sum(1 for d in days if self.day(d) is not None)
+        for sym in symbols:
+            for year in range(start.year, today.year + 1):
+                self._actions_year(sym, year, today)
+        return {"sessions": len(days), "files": got, "symbols": len(symbols)}
+
+    def write_bundle(
+        self, out: Path, symbols: list[str], start: date, end: date, now: datetime
+    ) -> dict[str, int]:
+        """A compact feeder bundle (.tar.gz): the day files for [start, end]
+        filtered to `symbols`, their corporate-action files, and the symbol
+        list. Unpacked into a cache_dir, it serves an offline provider."""
+        import tarfile
+
+        assert self.cache_dir is not None
+        today = (now + timedelta(hours=5, minutes=30)).date()
+        wanted = set(symbols)
+        n_days = 0
+        with tarfile.open(out, "w:gz") as tar:
+
+            def add(name: str, data: bytes) -> None:
+                info = tarfile.TarInfo(name)
+                info.size, info.mtime = len(data), int(now.timestamp())
+                tar.addfile(info, io.BytesIO(data))
+
+            for d in self.calendar.sessions(start, end):
+                f = self.cache_dir / f"{d:%Y%m%d}.json"
+                if not f.is_file():
+                    continue
+                rows = {k: v for k, v in json.loads(f.read_text()).items() if k in wanted}
+                add(f.name, json.dumps(rows).encode())
+                n_days += 1
+            n_act = 0
+            for sym in sorted(wanted):
+                for year in range(start.year, today.year + 1):
+                    f = self.cache_dir / "actions" / f"{sym}_{year}.json"
+                    if f.is_file():
+                        add(f"actions/{f.name}", f.read_bytes())
+                        n_act += 1
+            add("universe.json", json.dumps(sorted(wanted)).encode())
+        return {"days": n_days, "action_files": n_act, "symbols": len(wanted)}
+
     # -- batches ----------------------------------------------------------------
 
     def _actions_year(self, symbol: str, year: int, today: date) -> list[dict[str, object]]:
@@ -307,13 +371,15 @@ class NseBhavcopyProvider:
         if key in self._ca_memo:
             return self._ca_memo[key]
         closed = date(year, 12, 31) < today - timedelta(days=30)  # past years don't change
-        path = (
-            self.cache_dir / "actions" / f"{symbol}_{year}.json"
-            if self.cache_dir and closed
-            else None
-        )
-        if path is not None and path.is_file():
+        path = self.cache_dir / "actions" / f"{symbol}_{year}.json" if self.cache_dir else None
+        # Online, only closed years are reused; the current year is re-fetched
+        # (and re-saved, so a feeder can ship it). Offline, the file must exist.
+        if path is not None and path.is_file() and (closed or self.offline):
             items: list[dict[str, object]] = json.loads(path.read_text())
+        elif self.offline:
+            raise ProviderUnavailableError(
+                f"corporate actions for {symbol} {year} were not supplied by the feeder"
+            )
         else:
             params = {
                 "index": "equities",

@@ -5,7 +5,7 @@ from __future__ import annotations
 import tempfile
 from functools import lru_cache
 from pathlib import Path
-from typing import Self
+from typing import Literal, Self
 from urllib.parse import urlparse
 
 from pydantic import Field, SecretStr, ValidationError, model_validator
@@ -59,6 +59,11 @@ class Settings(BaseSettings):
     data_cache_dir: Path = Field(
         default=Path(tempfile.gettempdir()) / "aegis-data", alias="AEGIS_DATA_CACHE_DIR"
     )
+
+    # How NSE end-of-day data arrives. "direct": this deployment downloads it.
+    # "push": NSE blocks this host, so a feeder machine pushes bundles in
+    # (see deploy/mac-feeder); the scheduled direct download is skipped.
+    nse_feed: Literal["direct", "push"] = Field(default="direct", alias="AEGIS_NSE_FEED")
 
     cors_origins: list[str] = Field(
         default_factory=lambda: ["http://localhost:3000"], alias="AEGIS_CORS_ORIGINS"

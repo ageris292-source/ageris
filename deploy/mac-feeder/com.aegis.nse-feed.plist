@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!-- Runs the Aegis NSE feeder at 19:10 local time (IST), Monday to Friday.
+     Install: copy to ~/Library/LaunchAgents/ (after replacing REPO_PATH and LOG_PATH)
+     and `launchctl load` it. If the Mac is asleep at 19:10, launchd runs
+     the job when it wakes. -->
+<plist version="1.0">
+<dict>
+  <key>Label</key><string>com.aegis.nse-feed</string>
+  <key>ProgramArguments</key>
+  <array><string>REPO_PATH/deploy/mac-feeder/aegis-nse-feed.sh</string></array>
+  <key>EnvironmentVariables</key>
+  <dict><key>PATH</key><string>/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin</string></dict>
+  <key>StartCalendarInterval</key>
+  <array>
+    <dict><key>Weekday</key><integer>1</integer><key>Hour</key><integer>19</integer><key>Minute</key><integer>10</integer></dict>
+    <dict><key>Weekday</key><integer>2</integer><key>Hour</key><integer>19</integer><key>Minute</key><integer>10</integer></dict>
+    <dict><key>Weekday</key><integer>3</integer><key>Hour</key><integer>19</integer><key>Minute</key><integer>10</integer></dict>
+    <dict><key>Weekday</key><integer>4</integer><key>Hour</key><integer>19</integer><key>Minute</key><integer>10</integer></dict>
+    <dict><key>Weekday</key><integer>5</integer><key>Hour</key><integer>19</integer><key>Minute</key><integer>10</integer></dict>
+  </array>
+  <key>StandardOutPath</key><string>LOG_PATH</string>
+  <key>StandardErrorPath</key><string>LOG_PATH</string>
+</dict>
+</plist>

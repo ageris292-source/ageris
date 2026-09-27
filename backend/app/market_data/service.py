@@ -10,6 +10,7 @@ import zlib
 from dataclasses import dataclass
 from datetime import UTC, date, datetime, timedelta
 from decimal import Decimal
+from pathlib import Path
 
 from sqlalchemy import func, select, text
 from sqlalchemy.orm import Session
@@ -42,7 +43,13 @@ class StockNotFoundError(LookupError):
 # ---------------------------------------------------------------- providers --
 
 
-def build_provider(name: str, config: AegisConfig | None = None) -> DailyBarProvider:
+def build_provider(
+    name: str,
+    config: AegisConfig | None = None,
+    *,
+    offline: bool = False,
+    cache_dir: Path | None = None,
+) -> DailyBarProvider:
     cfg = config or get_config()
     md = cfg.market_data
     if name == "yahoo":
@@ -60,7 +67,8 @@ def build_provider(name: str, config: AegisConfig | None = None) -> DailyBarProv
             md.providers["nse_bhavcopy"],
             get_calendar(md.calendar),
             timedelta(minutes=md.eod_availability_lag_minutes),
-            cache_dir=get_settings().data_cache_dir / "nse_bhavcopy",
+            cache_dir=cache_dir or get_settings().data_cache_dir / "nse_bhavcopy",
+            offline=offline,
         )
     raise ProviderUnavailableError(f"unknown provider {name!r}")
 

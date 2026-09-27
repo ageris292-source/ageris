@@ -268,6 +268,10 @@ def refresh_nse_eod() -> dict[str, object]:
     now = datetime.now(UTC)
     if not get_config().market_data.providers["nse_bhavcopy"].enabled:
         return {"job": "nse_eod", "skipped": "provider disabled"}
+    from app.core.settings import get_settings
+
+    if get_settings().nse_feed == "push":
+        return {"job": "nse_eod", "skipped": "data is pushed by the feeder (AEGIS_NSE_FEED=push)"}
     with _session_factory()() as db:
         stocks = list(db.scalars(select(Stock).where(Stock.is_active, Stock.exchange == "NSE")))
         if not stocks:

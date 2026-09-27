@@ -147,3 +147,24 @@ Create the first admin from the backend service's shell:
 ```
 python -m app.cli create-user --email you@example.in --role admin
 ```
+
+### Railway: NSE data feeder
+
+NSE blocks cloud servers, including Railway (HTTP 403), so licensed NSE data reaches Railway through a feeder: a machine NSE does not block, such as your Mac.
+
+1. The feeder runs `app.cli prefetch-nse`. It downloads the daily bhavcopy files and each stock's NSE corporate actions into a local cache, then writes a small bundle containing only the tracked stocks (today's NIFTY 50 list).
+2. It pipes the bundle into the `worker` over `railway ssh`, authenticated by your Railway CLI login. The database keeps no public address.
+3. On the worker, `app.cli ingest-nse --offline` ingests from the bundle only. Each stock gets a validated, versioned, audited run. A stock whose corporate actions are missing fails rather than storing unadjusted prices.
+
+Set `AEGIS_NSE_FEED=push` on `ageris` and `worker` so the scheduled direct download is skipped.
+
+Setup on the Mac, once:
+
+```bash
+deploy/mac-feeder/aegis-nse-feed.sh 2021-09-27      # backfill ~5 years (first run)
+sed -e "s#REPO_PATH#$PWD#" -e "s#LOG_PATH#$HOME/Library/Logs/aegis-nse-feed.log#" \
+  deploy/mac-feeder/com.aegis.nse-feed.plist > ~/Library/LaunchAgents/com.aegis.nse-feed.plist
+launchctl load ~/Library/LaunchAgents/com.aegis.nse-feed.plist
+```
+
+The job then runs at 19:10 IST, Monday to Friday. Each run re-sends the last 14 days, and re-sending is idempotent, so a missed evening is filled in by the next run. If the Mac was asleep at 19:10, launchd runs the job when it wakes. The worker's paper, ranking and monitoring jobs run from 19:30 IST. Remove the schedule with `launchctl unload ~/Library/LaunchAgents/com.aegis.nse-feed.plist`.

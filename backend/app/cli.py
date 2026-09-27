@@ -11,6 +11,7 @@ from __future__ import annotations
 import argparse
 import getpass
 import sys
+from datetime import date, datetime
 
 from app.core.config_file import get_config
 from app.db.session import _session_factory
@@ -32,6 +33,13 @@ def main(argv: list[str] | None = None) -> int:
     nse.add_argument("tickers", nargs="*", help="NSE tickers, e.g. TCS.NS (or use --nifty50)")
     nse.add_argument("--nifty50", action="store_true", help="today's NIFTY 50 list from NSE")
     nse.add_argument("--years", type=int, default=5)
+    nse.add_argument("--since", help="start date YYYY-MM-DD (instead of --years)")
+    nse.add_argument(
+        "--offline",
+        action="store_true",
+        help="use only a feeder bundle in --dir (never contact NSE)",
+    )
+    nse.add_argument("--dir", help="data directory (default: AEGIS_DATA_CACHE_DIR/nse_bhavcopy)")
     nse.add_argument(
         "--with-research",
         action="store_true",
@@ -43,6 +51,16 @@ def main(argv: list[str] | None = None) -> int:
     ing.add_argument("tickers", nargs="+", help="e.g. TCS.NS RELIANCE.NS")
     ing.add_argument("--years", type=int, default=5)
     ing.add_argument("--skip-news", action="store_true")
+    pre = sub.add_parser(
+        "prefetch-nse",
+        help="feeder: download NSE files into --dir and write a bundle (no database needed)",
+    )
+    pre.add_argument("tickers", nargs="*")
+    pre.add_argument("--nifty50", action="store_true")
+    pre.add_argument("--years", type=int, default=5)
+    pre.add_argument("--since", help="start date YYYY-MM-DD (instead of --years)")
+    pre.add_argument("--dir", required=True, help="local cache directory (kept between runs)")
+    pre.add_argument("--bundle", required=True, help="output .tar.gz for the deployment")
     sub.add_parser("ingest-macro", help="fetch World Bank + market series (NIFTY, VIX, FX, oil)")
     args = parser.parse_args(argv)
 
@@ -64,7 +82,19 @@ def main(argv: list[str] | None = None) -> int:
     if args.cmd == "check-deploy":
         return _check_deploy()
     if args.cmd == "ingest-nse":
-        return _ingest_nse(args.tickers, args.nifty50, args.years, args.with_research)
+        return _ingest_nse(
+            args.tickers,
+            args.nifty50,
+            args.years,
+            args.with_research,
+            since=args.since,
+            offline=args.offline,
+            data_dir=args.dir,
+        )
+    if args.cmd == "prefetch-nse":
+        return _prefetch_nse(
+            args.tickers, args.nifty50, args.years, args.since, args.dir, args.bundle
+        )
 
     password = getpass.getpass("Password (min 12 chars): ")
     if password != getpass.getpass("Repeat password: "):
@@ -150,36 +180,91 @@ def _check_deploy() -> int:
     return 1 if problems else 0
 
 
-def _ingest_nse(tickers: list[str], nifty50: bool, years: int, research: bool) -> int:
-    """Idempotent backfill, one calendar year at a time (each year commits,
-    so an interrupted run resumes cheaply; downloaded files are cached)."""
-    from datetime import UTC, date, datetime, timedelta
+def _nse_symbols(tickers: list[str], nifty50: bool, data_dir: str | None) -> list[str]:
+    """NSE symbols from explicit tickers and/or NIFTY 50 (NSE's published list,
+    or the list inside a feeder bundle when NSE is not reachable)."""
+    import json
+    from pathlib import Path
+
+    from app.market_data.providers.nse_bhavcopy import nifty50_symbols
+    from app.market_data.types import Exchange, Ticker
+
+    out = [t.symbol for t in (Ticker.parse(x) for x in tickers) if t.exchange is Exchange.NSE]
+    if nifty50:
+        bundled = Path(data_dir) / "universe.json" if data_dir else None
+        if bundled is not None and bundled.is_file():
+            out += json.loads(bundled.read_text())
+        else:
+            out += nifty50_symbols()
+    return list(dict.fromkeys(out))
+
+
+def _window(years: int, since: str | None) -> tuple[date, datetime]:
+    from datetime import UTC, timedelta
+
+    now = datetime.now(UTC)
+    start = date.fromisoformat(since) if since else now.date() - timedelta(days=365 * years)
+    return start, now
+
+
+def _prefetch_nse(
+    tickers: list[str], nifty50: bool, years: int, since: str | None, data_dir: str, bundle: str
+) -> int:
+    from pathlib import Path
 
     from app.market_data import service as md
-    from app.market_data.providers.nse_bhavcopy import nifty50_symbols
-    from app.market_data.types import InvalidTickerError, Ticker
+    from app.market_data.providers.nse_bhavcopy import NseBhavcopyProvider
 
-    raw = list(tickers) + ([f"{s}.NS" for s in nifty50_symbols()] if nifty50 else [])
-    if not raw:
+    syms = _nse_symbols(tickers, nifty50, None)
+    if not syms:
         print("give tickers or --nifty50", file=sys.stderr)
         return 2
-    now = datetime.now(UTC)
-    start = now.date() - timedelta(days=365 * years)
+    start, now = _window(years, since)
+    p = md.build_provider("nse_bhavcopy", cache_dir=Path(data_dir))
+    assert isinstance(p, NseBhavcopyProvider)
+    got = p.prefetch(syms, start, now.date(), now)
+    info = p.write_bundle(Path(bundle), syms, start, now.date(), now)
+    print(f"prefetched {got}; bundle {bundle}: {info}", flush=True)
+    return 0
+
+
+def _ingest_nse(
+    tickers: list[str],
+    nifty50: bool,
+    years: int,
+    research: bool,
+    *,
+    since: str | None = None,
+    offline: bool = False,
+    data_dir: str | None = None,
+) -> int:
+    """Idempotent backfill, one calendar year at a time (each year commits,
+    so an interrupted run resumes cheaply; downloaded files are cached).
+    With --offline, only a feeder bundle unpacked in --dir is used."""
+    from datetime import timedelta
+    from pathlib import Path
+
+    from app.market_data import service as md
+    from app.market_data.types import Ticker
+
+    if offline and not data_dir:
+        print("--offline needs --dir", file=sys.stderr)
+        return 2
+    syms = _nse_symbols(tickers, nifty50, data_dir)
+    if not syms:
+        print("give tickers or --nifty50", file=sys.stderr)
+        return 2
+    start, now = _window(years, since)
+    provider = md.build_provider(
+        "nse_bhavcopy", offline=offline, cache_dir=Path(data_dir) if data_dir else None
+    )
     failures = 0
     with _session_factory()() as db:
-        stocks = []
-        for r in dict.fromkeys(raw):
-            try:
-                t = Ticker.parse(r)
-            except InvalidTickerError as exc:
-                print(f"{r}: {exc}", file=sys.stderr)
-                failures += 1
-                continue
-            stocks.append(md.add_stock(db, t, None))
+        stocks = [md.add_stock(db, Ticker.parse(f"{s}.NS"), None) for s in syms]
         s = start
         while s <= now.date():
             e = min(date(s.year, 12, 31), now.date())
-            res = md.ingest_nse(db, stocks, s, e, now=now)
+            res = md.ingest_nse(db, stocks, s, e, now=now, provider=provider)
             bad = {k: v for k, v in res.items() if v in ("failed", "rejected")}
             failures += len(bad)
             print(f"{s}..{e}: {len(res) - len(bad)} ok, failed: {bad or '-'}", flush=True)
