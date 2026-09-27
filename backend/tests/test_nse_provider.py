@@ -368,3 +368,15 @@ def test_push_mode_skips_the_direct_download(monkeypatch: pytest.MonkeyPatch) ->
     monkeypatch.setattr(settings_mod, "get_settings", lambda: pushed)
     out = celery_app.refresh_nse_eod()
     assert "skipped" in out and "feeder" in str(out["skipped"])
+
+
+def test_list_nse_prints_tracked_nse_symbols(
+    db: Session, capsys: pytest.CaptureFixture[str]
+) -> None:
+    from app.cli import main as cli
+
+    for t in ("TCS.NS", "M&M.NS", "TCS.BO"):
+        md.add_stock(db, Ticker.parse(t), None)
+    db.commit()
+    assert cli(["list-nse"]) == 0
+    assert capsys.readouterr().out.split() == ["M&M", "TCS"]  # NSE only, sorted

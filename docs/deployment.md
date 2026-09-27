@@ -152,7 +152,7 @@ python -m app.cli create-user --email you@example.in --role admin
 
 NSE blocks cloud servers, including Railway (HTTP 403), so licensed NSE data reaches Railway through a feeder: a machine NSE does not block, such as your Mac.
 
-1. The feeder runs `app.cli prefetch-nse`. It downloads the daily bhavcopy files and each stock's NSE corporate actions into a local cache, then writes a small bundle containing only the tracked stocks (today's NIFTY 50 list).
+1. The feeder runs `app.cli prefetch-nse`. It downloads the daily bhavcopy files and each stock's NSE corporate actions into a local cache, then writes a small bundle containing only the tracked stocks: today's NIFTY 50, plus every NSE stock added in the app (read from the worker with `app.cli list-nse`).
 2. It pipes the bundle into the `worker` over `railway ssh`, authenticated by your Railway CLI login. The database keeps no public address.
 3. On the worker, `app.cli ingest-nse --offline` ingests from the bundle only. Each stock gets a validated, versioned, audited run. A stock whose corporate actions are missing fails rather than storing unadjusted prices.
 

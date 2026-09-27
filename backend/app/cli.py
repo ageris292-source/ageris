@@ -61,6 +61,7 @@ def main(argv: list[str] | None = None) -> int:
     pre.add_argument("--since", help="start date YYYY-MM-DD (instead of --years)")
     pre.add_argument("--dir", required=True, help="local cache directory (kept between runs)")
     pre.add_argument("--bundle", required=True, help="output .tar.gz for the deployment")
+    sub.add_parser("list-nse", help="active NSE symbols tracked in the database, one per line")
     sub.add_parser("ingest-macro", help="fetch World Bank + market series (NIFTY, VIX, FX, oil)")
     args = parser.parse_args(argv)
 
@@ -91,6 +92,19 @@ def main(argv: list[str] | None = None) -> int:
             offline=args.offline,
             data_dir=args.dir,
         )
+    if args.cmd == "list-nse":
+        from sqlalchemy import select
+
+        from app.models import Stock
+
+        with _session_factory()() as db:
+            for sym in db.scalars(
+                select(Stock.symbol)
+                .where(Stock.is_active, Stock.exchange == "NSE")
+                .order_by(Stock.symbol)
+            ):
+                print(sym)
+        return 0
     if args.cmd == "prefetch-nse":
         return _prefetch_nse(
             args.tickers, args.nifty50, args.years, args.since, args.dir, args.bundle

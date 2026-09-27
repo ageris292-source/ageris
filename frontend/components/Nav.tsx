@@ -14,6 +14,7 @@ const LINKS = [
   { href: "/trade", label: "Trade risk" },
   { href: "/paper", label: "Paper trading" },
   { href: "/ranking", label: "Ranking" },
+  { href: "/system", label: "System" },
 ];
 
 /** Unread alert count, refreshed every minute and when an alert is read. */

@@ -12,6 +12,7 @@ import { NewsList } from "@/components/NewsList";
 import { TechnicalPanel } from "@/components/TechnicalPanel";
 import { ValuationDetails } from "@/components/ValuationDetails";
 import { ReportPanel } from "@/components/ReportPanel";
+import { StockExtras } from "@/components/StockExtras";
 import { useSession } from "@/components/useSession";
 import {
   api,
@@ -327,6 +328,8 @@ export default function StockPage() {
           )}
 
           <ReportPanel report={report} busy={reportBusy} onRun={runReport} onDownload={downloadReport} />
+
+          <StockExtras ticker={ticker} guard={guard} isAdmin={me?.role === "admin"} onImported={() => void loadDetail()} />
 
           <section className="mb-4 rounded-lg border border-line bg-panel p-5">
             <div className="mb-4 flex flex-wrap items-center justify-between gap-3">

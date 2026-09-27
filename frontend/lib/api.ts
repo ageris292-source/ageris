@@ -671,6 +671,76 @@ export interface MonitoringOverview {
   }[];
 }
 
+export interface ProviderInfo {
+  name: string;
+  enabled: boolean;
+  licensed: boolean;
+  available: boolean;
+  reason: string;
+}
+
+export interface LiveStatus {
+  available: boolean;
+  broker: string;
+  broker_reason: string;
+  live_orders_permitted: boolean;
+  blocking_reasons: string[];
+}
+
+export interface MacroRow {
+  series: string;
+  latest_date: string | null;
+  latest_value: number | null;
+  observations: number;
+  licensed: boolean | null;
+  retrieved_at: string | null;
+}
+
+export interface MacroManualIn {
+  series: string;
+  period_date: string;
+  value: number;
+  unit: string;
+  source: string;
+  published_at: string;
+}
+
+export interface ModelEstimate {
+  available: boolean;
+  reason?: string;
+  model_id?: string;
+  horizon_days?: number;
+  as_of_date?: string;
+  p_profit?: number;
+  p_outperform?: number;
+  expected_return?: number;
+  calibration_error?: number;
+  oos_periods?: number;
+}
+
+export interface ReportHistoryRow {
+  report_id: number;
+  created_at: string;
+  as_of: string;
+  stance: Stance;
+  composite_score: number | null;
+  confidence: number | null;
+}
+
+export interface CostResult {
+  schedule: string;
+  buy_bps: number;
+  sell_bps: number;
+  impact_bps_each_side: number;
+  financing_fraction: number;
+  round_trip_fraction: number;
+  order_value: number;
+  participation_pct_of_adv: number | null;
+  items_bps: Record<string, number>;
+  adtv: number | null;
+  notice: string;
+}
+
 export class ApiError extends Error {
   constructor(public status: number, message: string) {
     super(message);
@@ -818,6 +888,29 @@ export const api = {
   monitoringRuns: (token: string, modelId?: number) =>
     request<MonitorRun[]>(`/monitoring/runs?limit=60${modelId ? `&model_id=${modelId}` : ""}`, {}, token),
   runMonitoring: (token: string) => request<MonitorRun[]>("/monitoring/run", { method: "POST" }, token),
+  providers: (token: string) => request<ProviderInfo[]>("/data/providers", {}, token),
+  liveStatus: (token: string) => request<LiveStatus>("/live/status", {}, token),
+  nlpStatus: (token: string) => request<Record<string, string>>("/nlp/status", {}, token),
+  narratorStatus: (token: string) =>
+    request<{ available: boolean; reason?: string; provider?: string; model?: string | null }>("/narrator/status", {}, token),
+  macroSummary: (token: string) => request<MacroRow[]>("/macro", {}, token),
+  macroIngest: (token: string) => request<Record<string, string>>("/macro/ingest", { method: "POST" }, token),
+  macroManual: (token: string, body: MacroManualIn) =>
+    request<{ id: number; series: string; version: number }>("/macro/manual", json(body), token),
+  modelEstimate: (token: string, ticker: string) =>
+    request<ModelEstimate>(`/models/estimate/${encodeURIComponent(ticker)}`, {}, token),
+  analysisHistory: (token: string, ticker: string) =>
+    request<ReportHistoryRow[]>(`/analysis/${encodeURIComponent(ticker)}/history`, {}, token),
+  importCsv: (token: string, ticker: string, file: File, source: string, basis: Basis) => {
+    const form = new FormData();
+    form.set("file", file);
+    form.set("source", source);
+    form.set("basis", basis);
+    return request<IngestionRun>(`/stocks/${encodeURIComponent(ticker)}/import-csv`, { method: "POST", body: form }, token);
+  },
+  tradeCosts: (token: string, body: { ticker: string; quantity: number; entry_price: string; horizon_days: number; quoted_spread_bps?: number | null }) =>
+    request<CostResult>("/trade/costs", json(body), token),
+  monitoringRun: (token: string, id: number) => request<MonitorRun>(`/monitoring/runs/${id}`, {}, token),
   riskAgent: (token: string, ticker: string) =>
     request<AgentOutput>(`/risk-agent/${encodeURIComponent(ticker)}`, {}, token),
   portfolios: (token: string) => request<PortfolioSummary[]>("/portfolios", {}, token),

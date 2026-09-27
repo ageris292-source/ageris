@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { Login } from "@/components/Login";
+import { CostCalculator } from "@/components/CostCalculator";
 import { Nav } from "@/components/Nav";
 import { useSession } from "@/components/useSession";
 import {
@@ -133,6 +134,8 @@ export default function TradePage() {
         gate. Approved proposals still need human approval before any order.
       </p>
       {error && <p className="mb-4 text-sm text-fail">{error}</p>}
+
+      <CostCalculator guard={guard} />
 
       <Panel title="Evaluate a proposal">
         <form onSubmit={submit} className="grid gap-2 sm:grid-cols-3 lg:grid-cols-5">

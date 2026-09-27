@@ -125,6 +125,16 @@ export default function MonitoringPage() {
   const [ov, setOv] = useState<MonitoringOverview | null>(null);
   const [runs, setRuns] = useState<MonitorRun[]>([]);
   const [busy, setBusy] = useState(false);
+  const [picked, setPicked] = useState<MonitorRun | null>(null);
+
+  async function pick(id: number) {
+    try {
+      const r = await guard((t) => api.monitoringRun(t, id));
+      if (r) setPicked(r);
+    } catch (err) {
+      setMsg({ tone: "fail", text: err instanceof Error ? err.message : "Could not load the run" });
+    }
+  }
   const [msg, setMsg] = useState<{ tone: "ok" | "fail"; text: string } | null>(null);
 
   const load = useCallback(async () => {
@@ -217,7 +227,14 @@ export default function MonitoringPage() {
             </thead>
             <tbody>
               {runs.map((r) => (
-                <tr key={r.id} className="border-t border-line">
+                <tr
+                  key={r.id}
+                  className={`cursor-pointer border-t border-line hover:bg-surface ${picked?.id === r.id ? "bg-surface" : ""}`}
+                  onClick={() => void pick(r.id)}
+                  tabIndex={0}
+                  onKeyDown={(e) => { if (e.key === "Enter") void pick(r.id); }}
+                  aria-label={`Show monitoring run ${r.id}`}
+                >
                   <td className="py-1 pr-3 font-mono">{r.id}</td>
                   <td className="py-1 pr-3">{ist(r.as_of)}</td>
                   <td className="py-1 pr-3 font-mono">{r.model_name}</td>
@@ -232,6 +249,22 @@ export default function MonitoringPage() {
             </tbody>
           </table>
           </div>
+          <p className="mt-2 text-xs text-muted">Select a run to see its full drift table and calibration.</p>
+        </Panel>
+      )}
+      {picked && (
+        <Panel title={`Run #${picked.id} · ${picked.model_name ?? ""} · ${ist(picked.as_of)}`}>
+          <div className="mb-3 flex flex-wrap items-center gap-3 text-sm">
+            <Badge s={picked.status} />
+            {picked.action === "retired" && <span className="text-fail">✕ retired automatically</span>}
+            <button className="ml-auto text-xs underline text-muted" onClick={() => setPicked(null)}>Close</button>
+          </div>
+          {picked.reasons.length > 0 && (
+            <ul className="mb-4 list-inside list-disc text-xs text-unknown">
+              {picked.reasons.map((x) => <li key={x}>{x}</li>)}
+            </ul>
+          )}
+          <RunDetail r={picked} />
         </Panel>
       )}
     </main>
