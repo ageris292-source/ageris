@@ -101,5 +101,8 @@ class ProviderBatch:
     bars: list[Bar]
     actions: list[CorporateActionIn] = field(default_factory=list)
     dropped: list[DroppedRow] = field(default_factory=list)
+    # kept rows the source flags (e.g. an exchange price adjustment that is
+    # not a split/bonus): stored, but reported as data-quality warnings
+    warnings: list[DroppedRow] = field(default_factory=list)
     instrument_name: str | None = None
     currency: str | None = None

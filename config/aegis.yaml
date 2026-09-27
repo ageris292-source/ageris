@@ -65,6 +65,12 @@ market_data:
     csv_import:
       enabled: true
       licensed: true                     # operator attests the imported file comes from a licensed/official source
+    nse_bhavcopy:
+      enabled: true
+      licensed: true                     # official NSE end-of-day files (exchange source; personal use per NSE terms)
+      timeout_seconds: 20
+      request_interval_seconds: 0.3      # be polite to nsearchives.nseindia.com
+      # corporate actions (splits, bonuses, dividends) come from NSE's own feed
 
 # Technical analysis agent (Phase 3). Periods follow common textbook defaults;
 # like every threshold here they are starting values to be validated, not optima.

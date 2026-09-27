@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import tempfile
 from functools import lru_cache
 from pathlib import Path
 from typing import Self
@@ -53,6 +54,11 @@ class Settings(BaseSettings):
     )  # smtp(s)://user:pass@host:port
     alert_email_to: str | None = Field(default=None, alias="AEGIS_ALERT_EMAIL_TO")
     alert_email_from: str = Field(default="aegis@localhost", alias="AEGIS_ALERT_EMAIL_FROM")
+
+    # Downloaded provider files (e.g. NSE bhavcopies); safe to delete.
+    data_cache_dir: Path = Field(
+        default=Path(tempfile.gettempdir()) / "aegis-data", alias="AEGIS_DATA_CACHE_DIR"
+    )
 
     cors_origins: list[str] = Field(
         default_factory=lambda: ["http://localhost:3000"], alias="AEGIS_CORS_ORIGINS"

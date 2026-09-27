@@ -3,6 +3,7 @@
 python -m app.cli create-user --email you@example.com --role admin
 python -m app.cli check-config
 python -m app.cli check-deploy     # production readiness (exit 1 on any problem)
+python -m app.cli ingest-nse --nifty50 --years 5 --with-research   # licensed NSE data
 """
 
 from __future__ import annotations
@@ -25,6 +26,17 @@ def main(argv: list[str] | None = None) -> int:
     cu.add_argument("--role", choices=[r.value for r in UserRole], default=UserRole.ANALYST.value)
     sub.add_parser("check-config")
     sub.add_parser("check-deploy", help="report production-readiness problems (exit 1 if any)")
+    nse = sub.add_parser(
+        "ingest-nse", help="licensed NSE end-of-day prices + corporate actions (bhavcopy)"
+    )
+    nse.add_argument("tickers", nargs="*", help="NSE tickers, e.g. TCS.NS (or use --nifty50)")
+    nse.add_argument("--nifty50", action="store_true", help="today's NIFTY 50 list from NSE")
+    nse.add_argument("--years", type=int, default=5)
+    nse.add_argument(
+        "--with-research",
+        action="store_true",
+        help="also fetch fundamentals and news (unlicensed research sources)",
+    )
     ing = sub.add_parser(
         "ingest", help="add NSE/BSE stocks and fetch prices, financials and news for them"
     )
@@ -51,6 +63,8 @@ def main(argv: list[str] | None = None) -> int:
 
     if args.cmd == "check-deploy":
         return _check_deploy()
+    if args.cmd == "ingest-nse":
+        return _ingest_nse(args.tickers, args.nifty50, args.years, args.with_research)
 
     password = getpass.getpass("Password (min 12 chars): ")
     if password != getpass.getpass("Repeat password: "):
@@ -66,7 +80,7 @@ def main(argv: list[str] | None = None) -> int:
     return 0
 
 
-def _ingest(tickers: list[str], years: int, skip_news: bool) -> int:
+def _ingest(tickers: list[str], years: int, skip_news: bool, *, prices: bool = True) -> int:
     """Idempotent: re-running only adds new or revised data (versioned)."""
     from datetime import UTC, datetime, timedelta
 
@@ -76,7 +90,7 @@ def _ingest(tickers: list[str], years: int, skip_news: bool) -> int:
     from app.news import service as ns
 
     now = datetime.now(UTC)
-    prices = md.build_provider("yahoo")
+    yahoo = md.build_provider("yahoo")
     fin = fs.build_provider()
     news = None if skip_news else ns.build_news_provider()
     failures = 0
@@ -91,12 +105,12 @@ def _ingest(tickers: list[str], years: int, skip_news: bool) -> int:
             stock = md.add_stock(db, t, None)
             start = now.date() - timedelta(days=365 * years)
             for label in ("prices", "financials", "news"):
-                if label == "news" and news is None:
+                if (label == "news" and news is None) or (label == "prices" and not prices):
                     continue
                 try:
                     if label == "prices":
                         status = md.ingest_from_provider(
-                            db, stock, prices, start, now.date(), now=now
+                            db, stock, yahoo, start, now.date(), now=now
                         ).run.status
                     elif label == "financials":
                         status = fs.ingest_from_yahoo(db, stock, fin, None).status
@@ -109,10 +123,6 @@ def _ingest(tickers: list[str], years: int, skip_news: bool) -> int:
                     failures += 1
                     print(f"{t} {label}: failed ({exc.__class__.__name__}: {exc})", file=sys.stderr)
     return 1 if failures else 0
-
-
-if __name__ == "__main__":
-    raise SystemExit(main())
 
 
 def _check_deploy() -> int:
@@ -138,3 +148,46 @@ def _check_deploy() -> int:
     if not problems:
         print(f"OK production checks passed (config {cfg.fingerprint()[:12]})")
     return 1 if problems else 0
+
+
+def _ingest_nse(tickers: list[str], nifty50: bool, years: int, research: bool) -> int:
+    """Idempotent backfill, one calendar year at a time (each year commits,
+    so an interrupted run resumes cheaply; downloaded files are cached)."""
+    from datetime import UTC, date, datetime, timedelta
+
+    from app.market_data import service as md
+    from app.market_data.providers.nse_bhavcopy import nifty50_symbols
+    from app.market_data.types import InvalidTickerError, Ticker
+
+    raw = list(tickers) + ([f"{s}.NS" for s in nifty50_symbols()] if nifty50 else [])
+    if not raw:
+        print("give tickers or --nifty50", file=sys.stderr)
+        return 2
+    now = datetime.now(UTC)
+    start = now.date() - timedelta(days=365 * years)
+    failures = 0
+    with _session_factory()() as db:
+        stocks = []
+        for r in dict.fromkeys(raw):
+            try:
+                t = Ticker.parse(r)
+            except InvalidTickerError as exc:
+                print(f"{r}: {exc}", file=sys.stderr)
+                failures += 1
+                continue
+            stocks.append(md.add_stock(db, t, None))
+        s = start
+        while s <= now.date():
+            e = min(date(s.year, 12, 31), now.date())
+            res = md.ingest_nse(db, stocks, s, e, now=now)
+            bad = {k: v for k, v in res.items() if v in ("failed", "rejected")}
+            failures += len(bad)
+            print(f"{s}..{e}: {len(res) - len(bad)} ok, failed: {bad or '-'}", flush=True)
+            s = e + timedelta(days=1)
+        if research:
+            failures += _ingest([str(md.ticker_of(x)) for x in stocks], years, False, prices=False)
+    return 1 if failures else 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

@@ -104,6 +104,11 @@ class ProviderSettings(_Strict):
     # Unlicensed sources may feed research only; later gates reject them for paper/live.
     licensed: bool
     timeout_seconds: Annotated[float, Field(gt=0, le=60)] = 10.0
+    # pause between downloads (politeness towards public exchange servers)
+    request_interval_seconds: Annotated[float, Field(ge=0, le=10)] = 0.0
+    # False: the source has no dividends, so no total-return series is built
+    # from it (it would silently equal price-only returns)
+    supplies_dividends: bool = True
 
 
 class MarketDataRules(_Strict):
@@ -114,7 +119,7 @@ class MarketDataRules(_Strict):
     stale_price_run_sessions: Annotated[int, Field(ge=2, le=60)]
     max_missing_session_ratio: Annotated[float, Field(ge=0.0, lt=0.5)]
     provider_cache_seconds: Annotated[int, Field(ge=0, le=86_400)]
-    providers: dict[Literal["yahoo", "csv_import"], ProviderSettings]
+    providers: dict[Literal["yahoo", "csv_import", "nse_bhavcopy"], ProviderSettings]
 
 
 Period = Annotated[int, Field(ge=2, le=400)]

@@ -55,21 +55,27 @@ celery_app.conf.update(
             "schedule": crontab(minute=0, hour=4, day_of_week="sun"),
         },
         # After the EOD price refresh: mark paper portfolios, check theses.
+        # Licensed NSE end-of-day files are published in the evening IST;
+        # 19:00 IST (13:30 UTC). Everything that trades on prices runs after.
+        "refresh-nse-eod": {
+            "task": "aegis.refresh_nse_eod",
+            "schedule": crontab(minute=30, hour=13, day_of_week="mon-fri"),
+        },
         "paper-eod": {
             "task": "aegis.paper_eod",
-            "schedule": crontab(minute=15, hour=12, day_of_week="mon-fri"),
+            "schedule": crontab(minute=0, hour=14, day_of_week="mon-fri"),
         },
         # After paper-eod: rank the universe through the Trade Risk Engine.
         # Produces a record + alert only; it never proposes or places orders.
         "daily-ranking": {
             "task": "aegis.daily_ranking",
-            "schedule": crontab(minute=30, hour=12, day_of_week="mon-fri"),
+            "schedule": crontab(minute=15, hour=14, day_of_week="mon-fri"),
         },
         # After the ranking: log the active models' predictions, check drift
         # and calibration decay, retire a failing model and alert.
         "model-monitor": {
             "task": "aegis.model_monitor",
-            "schedule": crontab(minute=45, hour=12, day_of_week="mon-fri"),
+            "schedule": crontab(minute=30, hour=14, day_of_week="mon-fri"),
         },
         "refresh-eod-prices": {
             "task": "aegis.refresh_eod_prices",
@@ -94,6 +100,7 @@ def refresh_eod_prices() -> dict[str, object]:
 
     from sqlalchemy import select
 
+    from app.core.config_file import get_config
     from app.db.session import _session_factory
     from app.market_data import service
     from app.models import Stock
@@ -102,7 +109,10 @@ def refresh_eod_prices() -> dict[str, object]:
     provider = service.build_provider("yahoo")
     results: dict[str, str] = {}
     with _session_factory()() as db:
-        for stock in db.scalars(select(Stock).where(Stock.is_active)).all():
+        q = select(Stock).where(Stock.is_active)
+        if get_config().market_data.providers["nse_bhavcopy"].enabled:
+            q = q.where(Stock.exchange != "NSE")  # NSE listings: licensed job below
+        for stock in db.scalars(q).all():
             last = service.latest_session(db, stock)
             start = (last - timedelta(days=10)) if last else now.date() - timedelta(days=5 * 365)
             try:
@@ -240,3 +250,32 @@ def model_monitor() -> dict[str, object]:
             "at": now.isoformat(),
             "results": {str(r.model_id): f"{r.status} ({r.action})" for r in runs},
         }
+
+
+@celery_app.task(name="aegis.refresh_nse_eod")  # type: ignore[untyped-decorator]
+def refresh_nse_eod() -> dict[str, object]:
+    """Licensed NSE bars and corporate actions for every active NSE stock,
+    from the earliest last-stored session (minus a week) to today."""
+    from datetime import timedelta
+
+    from sqlalchemy import select
+
+    from app.core.config_file import get_config
+    from app.db.session import _session_factory
+    from app.market_data import service
+    from app.models import Stock
+
+    now = datetime.now(UTC)
+    if not get_config().market_data.providers["nse_bhavcopy"].enabled:
+        return {"job": "nse_eod", "skipped": "provider disabled"}
+    with _session_factory()() as db:
+        stocks = list(db.scalars(select(Stock).where(Stock.is_active, Stock.exchange == "NSE")))
+        if not stocks:
+            return {"job": "nse_eod", "at": now.isoformat(), "results": {}}
+        lasts = [service.latest_session(db, s) for s in stocks]
+        known = [d for d in lasts if d is not None]
+        start = (min(known) - timedelta(days=7)) if len(known) == len(lasts) else None
+        start = start or now.date() - timedelta(days=5 * 365)
+        results = service.ingest_nse(db, stocks, start, now.date(), now=now)
+        _alert_failures(db, "NSE EOD", results, now)
+    return {"job": "nse_eod", "at": now.isoformat(), "results": results}

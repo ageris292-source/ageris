@@ -15,6 +15,7 @@ from sqlalchemy import func, select, text
 from sqlalchemy.orm import Session
 
 from app.core.config_file import AegisConfig, get_config
+from app.core.settings import get_settings
 from app.market_data.adjustments import AdjustmentError, convert
 from app.market_data.cache import RedisResponseCache
 from app.market_data.calendar import IndiaCalendar, get_calendar
@@ -52,12 +53,21 @@ def build_provider(name: str, config: AegisConfig | None = None) -> DailyBarProv
             cache=RedisResponseCache(),
             cache_seconds=md.provider_cache_seconds,
         )
+    if name == "nse_bhavcopy":
+        from app.market_data.providers.nse_bhavcopy import NseBhavcopyProvider
+
+        return NseBhavcopyProvider(
+            md.providers["nse_bhavcopy"],
+            get_calendar(md.calendar),
+            timedelta(minutes=md.eod_availability_lag_minutes),
+            cache_dir=get_settings().data_cache_dir / "nse_bhavcopy",
+        )
     raise ProviderUnavailableError(f"unknown provider {name!r}")
 
 
 def provider_statuses(config: AegisConfig | None = None) -> list[ProviderStatus]:
     cfg = config or get_config()
-    out = [build_provider("yahoo", cfg).status()]
+    out = [build_provider("yahoo", cfg).status(), build_provider("nse_bhavcopy", cfg).status()]
     csv = cfg.market_data.providers["csv_import"]
     out.append(
         ProviderStatus(
@@ -170,6 +180,8 @@ def ingest_batch(
     )
     for d in batch.dropped:
         report.issues.append(Issue("provider_dropped_row", "info", d.session, d.reason))
+    for w in batch.warnings:
+        report.issues.append(Issue("provider_warning", "warning", w.session, w.reason))
     run.rows_rejected = len(report.rejected)
     run.quality_score = report.quality_score
     run.usable = report.usable
@@ -343,6 +355,52 @@ def ingest_from_provider(
     return ingest_batch(
         db, stock, batch, requested=(start, end), now=now, actor_id=actor_id, run=run
     )
+
+
+def ingest_nse(
+    db: Session,
+    stocks: list[Stock],
+    start: date,
+    end: date,
+    *,
+    now: datetime | None = None,
+    actor_id: uuid.UUID | None = None,
+    provider: object | None = None,
+) -> dict[str, str]:
+    """Licensed NSE end-of-day data for many NSE stocks: every daily file is
+    read once for all of them; each stock still gets its own validated,
+    versioned, audited ingestion run. Returns ticker -> run status."""
+    from app.market_data.providers.nse_bhavcopy import NseBhavcopyProvider
+
+    now = now or datetime.now(UTC)
+    p = provider if provider is not None else build_provider("nse_bhavcopy")
+    assert isinstance(p, NseBhavcopyProvider)
+    nse = [s for s in stocks if s.exchange == "NSE"]
+    batches = p.fetch_many([ticker_of(s) for s in nse], start, end, now)
+    out: dict[str, str] = {}
+    for stock in nse:
+        t = ticker_of(stock)
+        run = _new_run(db, stock, p.name, p.licensed, (start, end), actor_id)
+        b = batches[t]
+        if isinstance(b, Exception):
+            run.status, run.error = "failed", str(b)[:2000]
+            run.finished_at = datetime.now(UTC)
+            record_audit(
+                db,
+                action="market_data.ingest_failed",
+                actor_user_id=actor_id,
+                entity_type="stock",
+                entity_id=str(t),
+                details={"run_id": run.id, "error": run.error},
+            )
+            db.commit()
+            out[str(t)] = "failed"
+            continue
+        res = ingest_batch(
+            db, stock, b, requested=(start, end), now=now, actor_id=actor_id, run=run
+        )
+        out[str(t)] = res.run.status
+    return out
 
 
 def _new_run(
@@ -520,6 +578,16 @@ def get_series(
     if choice is None:
         return PriceSeries(ticker, basis, None, False, None, None, [], [], as_of, knowledge_at)
     stored_basis, source = PriceBasis(choice[0]), choice[1]
+    src = get_config().market_data.providers.get(source)  # type: ignore[call-overload]
+    if (
+        basis is PriceBasis.TOTAL_RETURN
+        and stored_basis is not PriceBasis.TOTAL_RETURN
+        and src is not None
+        and not src.supplies_dividends
+    ):
+        # A total-return series without dividends would silently equal price
+        # returns; callers fall back to split-adjusted and label it so.
+        raise AdjustmentError(f"{source} supplies no dividends: no total-return series")
     rows = _latest_versions(db, stock, stored_basis.value, source, start, end, as_of, knowledge_at)
     actions = get_actions(db, stock, source, as_of=as_of, knowledge_at=knowledge_at)
     bars = [
