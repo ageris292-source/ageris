@@ -821,8 +821,8 @@ export const api = {
   riskAgent: (token: string, ticker: string) =>
     request<AgentOutput>(`/risk-agent/${encodeURIComponent(ticker)}`, {}, token),
   portfolios: (token: string) => request<PortfolioSummary[]>("/portfolios", {}, token),
-  createPortfolio: (token: string, name: string, cash: string) =>
-    request<PortfolioSummary>("/portfolios", json({ name, cash, kind: "model" }), token),
+  createPortfolio: (token: string, name: string, cash: string, kind: "model" | "paper" = "model") =>
+    request<PortfolioSummary>("/portfolios", json({ name, cash, kind }), token),
   setPosition: (token: string, id: number, ticker: string, quantity: number, avg_cost: string) =>
     request<PortfolioSummary>(
       `/portfolios/${id}/positions`,

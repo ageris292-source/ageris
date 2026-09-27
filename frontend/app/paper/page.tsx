@@ -46,6 +46,28 @@ export default function PaperPage() {
   const [msg, setMsg] = useState<{ tone: "ok" | "fail"; text: string } | null>(null);
   const [busy, setBusy] = useState<number | null>(null);
   const isAdmin = me?.role === "admin";
+  const [creating, setCreating] = useState(false);
+  const [newName, setNewName] = useState("Paper");
+  const [newCash, setNewCash] = useState("1000000");
+  const [busyCreate, setBusyCreate] = useState(false);
+
+  async function createPaper() {
+    setBusyCreate(true);
+    setMsg(null);
+    try {
+      const p = await guard((t) => api.createPortfolio(t, newName.trim(), newCash, "paper"));
+      if (p) {
+        setSel(p.id);
+        setCreating(false);
+        setMsg({ tone: "ok", text: `Created paper portfolio “${p.name}”.` });
+      }
+      await load();
+    } catch (err) {
+      setMsg({ tone: "fail", text: err instanceof ApiError ? err.message : "Could not create the portfolio" });
+    } finally {
+      setBusyCreate(false);
+    }
+  }
 
   const load = useCallback(async () => {
     try {
@@ -117,6 +139,9 @@ export default function PaperPage() {
             </button>
           ))}
           <button className="rounded border border-line px-3 py-1.5 text-sm" onClick={monitor}>Check theses</button>
+          {pfs.length > 0 && !creating && (
+            <button className="rounded border border-line px-3 py-1.5 text-sm" onClick={() => setCreating(true)}>+ New</button>
+          )}
         </div>
       </div>
       {health?.system_mode !== "paper" && (
@@ -125,7 +150,33 @@ export default function PaperPage() {
         </div>
       )}
       {msg && <p className={`mb-4 text-sm ${msg.tone === "ok" ? "text-pass" : "text-fail"}`}>{msg.text}</p>}
-      {pfs.length === 0 && <p className="text-sm text-muted">No paper portfolio yet. Create one via the API (kind “paper”).</p>}
+      {(pfs.length === 0 || creating) && (
+        <Panel title="New paper portfolio">
+          <form
+            className="flex flex-wrap items-end gap-3 text-sm"
+            onSubmit={(e) => {
+              e.preventDefault();
+              void createPaper();
+            }}
+          >
+            <label className="flex flex-col gap-1">
+              <span className="text-xs text-muted">Name</span>
+              <input className="rounded border border-line bg-surface px-2 py-1" value={newName} onChange={(e) => setNewName(e.target.value)} minLength={2} maxLength={80} required />
+            </label>
+            <label className="flex flex-col gap-1">
+              <span className="text-xs text-muted">Starting cash (₹, simulated)</span>
+              <input className="rounded border border-line bg-surface px-2 py-1 font-mono" value={newCash} onChange={(e) => setNewCash(e.target.value)} inputMode="decimal" pattern="[0-9]+(\.[0-9]{1,2})?" required />
+            </label>
+            <button className="rounded bg-ink px-3 py-1.5 text-surface disabled:opacity-40" disabled={busyCreate} type="submit">
+              {busyCreate ? "Creating…" : "Create paper portfolio"}
+            </button>
+            {pfs.length > 0 && (
+              <button type="button" className="text-xs underline text-muted" onClick={() => setCreating(false)}>Cancel</button>
+            )}
+          </form>
+          <p className="mt-2 text-xs text-muted">Simulated money only. Orders still need an APPROVED decision, an admin&apos;s approval and a passing re-check.</p>
+        </Panel>
+      )}
 
       {data && m && (
         <>
