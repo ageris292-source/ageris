@@ -37,6 +37,48 @@ export interface RiskStatus {
 export interface Me {
   email: string;
   role: "admin" | "analyst";
+  id?: string;
+  must_change_password?: boolean;
+  created_at?: string | null;
+  last_login_at?: string | null;
+}
+
+export interface UserAdmin {
+  id: string;
+  email: string;
+  role: "admin" | "analyst";
+  is_active: boolean;
+  must_change_password: boolean;
+  created_at: string;
+  last_login_at: string | null;
+}
+
+export interface InviteResult {
+  user: UserAdmin;
+  temporary_password: string;
+  notice: string;
+}
+
+export interface WatchlistRow {
+  ticker: string;
+  name: string | null;
+  exchange: string;
+  note: string | null;
+  added_at: string;
+  latest_session: string | null;
+  last_close: number | null;
+  prev_close: number | null;
+  change_pct: number | null;
+  sparkline: number[];
+  freshness: GateStatus;
+  stance: Stance | null;
+  composite: number | null;
+  report_at: string | null;
+}
+
+export interface TokenOut {
+  access_token: string;
+  expires_in_seconds: number;
 }
 
 export type Basis = "raw" | "split_adjusted" | "total_return";
@@ -58,6 +100,9 @@ export interface StockSummary {
   latest_session: string | null;
   freshness: Freshness;
   last_run_status: string | null;
+  last_close?: number | null;
+  change_pct?: number | null;
+  sparkline?: number[];
 }
 
 export interface BarOut {
@@ -752,7 +797,7 @@ async function request<T>(path: string, init: RequestInit = {}, token?: string):
   if (token) headers.set("Authorization", `Bearer ${token}`);
   const res = await fetch(`${API_URL}${path}`, { ...init, headers, cache: "no-store" });
   if (!res.ok) {
-    let detail = res.statusText;
+    let detail = res.statusText || `HTTP ${res.status}`;
     try {
       const body = await res.json();
       detail = typeof body.detail === "string" ? body.detail : JSON.stringify(body.detail);
@@ -761,6 +806,7 @@ async function request<T>(path: string, init: RequestInit = {}, token?: string):
     }
     throw new ApiError(res.status, detail);
   }
+  if (res.status === 204) return undefined as T;
   return (await res.json()) as T;
 }
 
@@ -779,7 +825,27 @@ const json = (body: unknown): RequestInit => ({
   body: JSON.stringify(body),
 });
 
+const patch = (body: unknown): RequestInit => ({
+  method: "PATCH",
+  headers: { "Content-Type": "application/json" },
+  body: JSON.stringify(body),
+});
+
 export const api = {
+  changePassword: (token: string, current_password: string, new_password: string) =>
+    request<TokenOut>("/auth/change-password", json({ current_password, new_password }), token),
+  users: (token: string) => request<UserAdmin[]>("/users", {}, token),
+  inviteUser: (token: string, email: string, role: "admin" | "analyst") =>
+    request<InviteResult>("/users", json({ email, role }), token),
+  updateUser: (token: string, id: string, body: { role?: "admin" | "analyst"; is_active?: boolean }) =>
+    request<UserAdmin>(`/users/${id}`, patch(body), token),
+  resetUserPassword: (token: string, id: string) =>
+    request<InviteResult>(`/users/${id}/reset-password`, { method: "POST" }, token),
+  watchlist: (token: string) => request<WatchlistRow[]>("/watchlist", {}, token),
+  watch: (token: string, ticker: string, note?: string) =>
+    request<WatchlistRow>("/watchlist", json({ ticker, note: note || null }), token),
+  unwatch: (token: string, ticker: string) =>
+    request<void>(`/watchlist/${encodeURIComponent(ticker)}`, { method: "DELETE" }, token),
   health: () => request<Health>("/health"),
   login: (email: string, password: string) =>
     request<{ access_token: string; expires_in_seconds: number }>("/auth/token", {

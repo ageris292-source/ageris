@@ -1,9 +1,11 @@
 "use client";
 
 import {
+  Area,
   Bar,
   BarChart,
   CartesianGrid,
+  ComposedChart,
   Line,
   LineChart,
   ReferenceLine,
@@ -13,16 +15,10 @@ import {
   YAxis,
   type TooltipProps,
 } from "recharts";
+import { ChartTooltipBox } from "@/components/charts";
+import { useChartColors } from "@/components/providers/ThemeProvider";
 import type { BarOut, IndicatorSeries } from "@/lib/api";
-
-// Categorical slots 1-3 (dark steps), validated as a set against the panel
-// surface #161c23: CVD dE >= 9.4, normal-vision dE >= 26.5, contrast >= 3:1.
-// SMAs are also dashed, so identity never relies on colour alone.
-const SERIES = "#3987e5";
-const SMA_MID = "#d95926";
-const SMA_LONG = "#199e70";
-const GRID = "#263039";
-const MUTED = "#8b98a5";
+import { compact, inr, num, shortDate } from "@/lib/format";
 
 interface Point {
   session: string;
@@ -37,44 +33,6 @@ interface Point {
   rsi: number | null;
 }
 
-const inr = new Intl.NumberFormat("en-IN", { maximumFractionDigits: 2, minimumFractionDigits: 2 });
-const compact = new Intl.NumberFormat("en-IN", { notation: "compact", maximumFractionDigits: 1 });
-
-function fmtDate(iso: string) {
-  const d = new Date(iso + "T00:00:00");
-  return d.toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "2-digit" });
-}
-
-function Row({ k, v, cls = "" }: { k: string; v: string; cls?: string }) {
-  return (
-    <>
-      <dt className="text-muted">{k}</dt>
-      <dd className={`text-right ${cls}`}>{v}</dd>
-    </>
-  );
-}
-
-function PriceTooltip({ active, payload, mid, long }: TooltipProps<number, string> & { mid?: number; long?: number }) {
-  if (!active || !payload?.length) return null;
-  const p = payload[0].payload as Point;
-  return (
-    <div className="rounded border border-line bg-surface px-3 py-2 text-xs shadow-lg">
-      <div className="mb-1 font-medium text-ink">{fmtDate(p.session)}</div>
-      <dl className="grid grid-cols-[auto_auto] gap-x-3 gap-y-0.5 font-mono">
-        <Row k="Close" v={`₹${inr.format(p.close)}`} cls="text-ink" />
-        <Row k="Open" v={`₹${inr.format(p.open)}`} />
-        <Row k="High" v={`₹${inr.format(p.high)}`} />
-        <Row k="Low" v={`₹${inr.format(p.low)}`} />
-        <Row k="Volume" v={compact.format(p.volume)} />
-        {mid && p.smaMid !== null && <Row k={`SMA ${mid}`} v={`₹${inr.format(p.smaMid)}`} />}
-        {long && p.smaLong !== null && <Row k={`SMA ${long}`} v={`₹${inr.format(p.smaLong)}`} />}
-        {p.rsi !== null && <Row k="RSI" v={p.rsi.toFixed(1)} />}
-        {p.version > 1 && <Row k="Revision" v={`v${p.version}`} cls="text-unknown" />}
-      </dl>
-    </div>
-  );
-}
-
 function LegendItem({ color, label, dashed }: { color: string; label: string; dashed?: boolean }) {
   return (
     <span className="inline-flex items-center gap-1.5">
@@ -86,7 +44,10 @@ function LegendItem({ color, label, dashed }: { color: string; label: string; da
   );
 }
 
+/** Close with SMA overlays (slots 1-3 of the validated palette; SMAs also dashed,
+ *  so identity never relies on colour alone), volume and RSI panes sharing a crosshair. */
 export function PriceChart({ bars, indicators }: { bars: BarOut[]; indicators?: IndicatorSeries | null }) {
+  const c = useChartColors();
   const bySession = new Map(indicators?.points.map((p) => [p.session, p]) ?? []);
   const data: Point[] = bars.map((b) => {
     const ip = bySession.get(b.session);
@@ -104,46 +65,70 @@ export function PriceChart({ bars, indicators }: { bars: BarOut[]; indicators?: 
     };
   });
   if (data.length === 0) {
-    return <p className="py-16 text-center text-sm text-muted">No stored prices in this range.</p>;
+    return <p className="py-20 text-center text-sm text-muted">No stored prices in this range.</p>;
   }
   const overlays = Boolean(indicators && bySession.size);
   const mid = indicators?.sma_mid_period;
   const long = indicators?.sma_long_period;
-  const axis = { stroke: GRID, tick: { fill: MUTED, fontSize: 11 }, tickLine: false };
-  const margin = { top: 4, right: 8, bottom: 0, left: 0 };
+  const up = data[data.length - 1].close >= data[0].close;
+  const axis = { stroke: c.grid, tick: { fill: c.axis, fontSize: 11 }, tickLine: false };
+  const margin = { top: 4, right: 4, bottom: 0, left: 0 };
+
+  const Tip = ({ active, payload }: TooltipProps<number, string>) => {
+    if (!active || !payload?.length) return null;
+    const p = payload[0].payload as Point;
+    const rows: [string, string, string?][] = [
+      ["Close", inr(p.close), c.s1],
+      ["Open", inr(p.open)],
+      ["High", inr(p.high)],
+      ["Low", inr(p.low)],
+      ["Volume", compact(p.volume)],
+    ];
+    if (mid && p.smaMid !== null) rows.push([`SMA ${mid}`, inr(p.smaMid), c.s2]);
+    if (long && p.smaLong !== null) rows.push([`SMA ${long}`, inr(p.smaLong), c.s3]);
+    if (p.rsi !== null) rows.push(["RSI", num(p.rsi, 1)]);
+    if (p.version > 1) rows.push(["Revision", `v${p.version}`]);
+    return <ChartTooltipBox title={shortDate(p.session)} rows={rows} />;
+  };
+
   return (
     <div>
-      {overlays && (
-        <div className="mb-2 flex flex-wrap gap-4 text-xs text-muted" aria-label="Legend">
-          <LegendItem color={SERIES} label="Close" />
-          <LegendItem color={SMA_MID} label={`SMA ${mid}`} dashed />
-          <LegendItem color={SMA_LONG} label={`SMA ${long}`} dashed />
-        </div>
-      )}
-      <div className="h-72">
+      <div className="mb-2 flex flex-wrap gap-4 text-xs text-muted" aria-label="Legend">
+        <LegendItem color={c.s1} label="Close" />
+        {overlays && <LegendItem color={c.s2} label={`SMA ${mid}`} dashed />}
+        {overlays && <LegendItem color={c.s3} label={`SMA ${long}`} dashed />}
+      </div>
+      <div className="h-72 sm:h-80">
         <ResponsiveContainer width="100%" height="100%">
-          <LineChart data={data} syncId="px" margin={{ ...margin, top: 8 }}>
-            <CartesianGrid stroke={GRID} vertical={false} />
-            <XAxis dataKey="session" {...axis} tickFormatter={fmtDate} minTickGap={48} hide />
-            <YAxis {...axis} orientation="right" domain={["auto", "auto"]} width={64} tickFormatter={(v: number) => inr.format(v)} />
-            <Tooltip content={<PriceTooltip mid={mid} long={long} />} cursor={{ stroke: MUTED, strokeWidth: 1 }} isAnimationActive={false} />
+          <ComposedChart data={data} syncId="px" margin={{ ...margin, top: 8 }}>
+            <defs>
+              <linearGradient id="px-fill" x1="0" y1="0" x2="0" y2="1">
+                <stop offset="0%" stopColor={c.s1} stopOpacity={up ? 0.18 : 0.1} />
+                <stop offset="100%" stopColor={c.s1} stopOpacity={0} />
+              </linearGradient>
+            </defs>
+            <CartesianGrid stroke={c.grid} vertical={false} />
+            <XAxis dataKey="session" {...axis} tickFormatter={shortDate} minTickGap={56} hide />
+            <YAxis {...axis} axisLine={false} orientation="right" domain={["auto", "auto"]} width={72} tickFormatter={(v: number) => inr(v, 0)} />
+            <Tooltip content={<Tip />} cursor={{ stroke: c.axis, strokeWidth: 1 }} isAnimationActive={false} />
+            <Area type="linear" dataKey="close" stroke="none" fill="url(#px-fill)" isAnimationActive={false} activeDot={false} />
             {overlays && (
-              <Line type="linear" dataKey="smaLong" stroke={SMA_LONG} strokeWidth={2} strokeDasharray="5 4" dot={false} activeDot={false} connectNulls={false} isAnimationActive={false} />
+              <Line type="linear" dataKey="smaLong" stroke={c.s3} strokeWidth={2} strokeDasharray="5 4" dot={false} activeDot={false} connectNulls={false} isAnimationActive={false} />
             )}
             {overlays && (
-              <Line type="linear" dataKey="smaMid" stroke={SMA_MID} strokeWidth={2} strokeDasharray="5 4" dot={false} activeDot={false} connectNulls={false} isAnimationActive={false} />
+              <Line type="linear" dataKey="smaMid" stroke={c.s2} strokeWidth={2} strokeDasharray="5 4" dot={false} activeDot={false} connectNulls={false} isAnimationActive={false} />
             )}
-            <Line type="linear" dataKey="close" stroke={SERIES} strokeWidth={2} dot={false} activeDot={{ r: 4, stroke: "#161c23", strokeWidth: 2, fill: SERIES }} isAnimationActive={false} />
-          </LineChart>
+            <Line type="linear" dataKey="close" stroke={c.s1} strokeWidth={2} dot={false} activeDot={{ r: 4, stroke: c.surface, strokeWidth: 2, fill: c.s1 }} isAnimationActive={false} />
+          </ComposedChart>
         </ResponsiveContainer>
       </div>
-      <div className="mt-1 h-20">
+      <div className="mt-1 h-16">
         <ResponsiveContainer width="100%" height="100%">
           <BarChart data={data} syncId="px" margin={margin} barCategoryGap={1}>
-            <XAxis dataKey="session" {...axis} tickFormatter={fmtDate} minTickGap={48} hide={overlays} />
-            <YAxis {...axis} orientation="right" width={64} tickFormatter={(v: number) => compact.format(v)} />
-            <Tooltip content={() => null} cursor={{ fill: "rgba(139,152,165,0.12)" }} />
-            <Bar dataKey="volume" fill={MUTED} fillOpacity={0.55} radius={[2, 2, 0, 0]} isAnimationActive={false} />
+            <XAxis dataKey="session" {...axis} tickFormatter={shortDate} minTickGap={56} hide={overlays} />
+            <YAxis {...axis} axisLine={false} orientation="right" width={72} tickFormatter={(v: number) => compact(v)} tickCount={2} />
+            <Tooltip content={() => null} cursor={{ fill: c.grid }} />
+            <Bar dataKey="volume" fill={c.axis} fillOpacity={0.5} radius={[2, 2, 0, 0]} isAnimationActive={false} />
           </BarChart>
         </ResponsiveContainer>
       </div>
@@ -151,18 +136,18 @@ export function PriceChart({ bars, indicators }: { bars: BarOut[]; indicators?: 
         <div className="mt-1 h-24">
           <ResponsiveContainer width="100%" height="100%">
             <LineChart data={data} syncId="px" margin={margin}>
-              <XAxis dataKey="session" {...axis} tickFormatter={fmtDate} minTickGap={48} />
-              <YAxis {...axis} orientation="right" width={64} domain={[0, 100]} ticks={[indicators.rsi_oversold, indicators.rsi_overbought]} />
-              <ReferenceLine y={indicators.rsi_overbought} stroke={MUTED} strokeDasharray="3 3" />
-              <ReferenceLine y={indicators.rsi_oversold} stroke={MUTED} strokeDasharray="3 3" />
-              <Tooltip content={() => null} cursor={{ stroke: MUTED, strokeWidth: 1 }} />
-              <Line type="linear" dataKey="rsi" stroke={SERIES} strokeWidth={1.5} dot={false} activeDot={false} isAnimationActive={false} />
+              <XAxis dataKey="session" {...axis} tickFormatter={shortDate} minTickGap={56} />
+              <YAxis {...axis} axisLine={false} orientation="right" width={72} domain={[0, 100]} ticks={[indicators.rsi_oversold, indicators.rsi_overbought]} />
+              <ReferenceLine y={indicators.rsi_overbought} stroke={c.axis} strokeDasharray="3 3" />
+              <ReferenceLine y={indicators.rsi_oversold} stroke={c.axis} strokeDasharray="3 3" />
+              <Tooltip content={() => null} cursor={{ stroke: c.axis, strokeWidth: 1 }} />
+              <Line type="linear" dataKey="rsi" stroke={c.s1} strokeWidth={1.5} dot={false} activeDot={false} isAnimationActive={false} />
             </LineChart>
           </ResponsiveContainer>
         </div>
       )}
-      <p className="mt-1 text-right text-[11px] text-muted">
-        Volume (shares){overlays ? " · RSI with overbought / oversold lines" : ""}
+      <p className="mt-1 text-right text-[11px] text-subtle">
+        Volume (shares){overlays ? ` · RSI with ${indicators?.rsi_overbought}/${indicators?.rsi_oversold} bands` : ""}
       </p>
     </div>
   );

@@ -1,265 +1,406 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
-import { api, ApiError, type GateStatus, type Health, type Me, type Regime, type RiskStatus } from "@/lib/api";
-import { readToken, writeToken } from "@/lib/auth";
-import { Login } from "@/components/Login";
-import { Nav } from "@/components/Nav";
+import {
+  ArrowRight,
+  Bell,
+  CheckCircle2,
+  CircleHelp,
+  Gauge,
+  Plus,
+  Search,
+  ShieldCheck,
+  Star,
+  Trophy,
+  Wallet,
+  XCircle,
+} from "lucide-react";
+import Link from "next/link";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { EquityChart } from "@/components/charts";
+import { usePageTitle } from "@/components/usePageTitle";
+import { useWatchlist, WatchStar } from "@/components/Watchlist";
+import { useSession } from "@/components/providers/SessionProvider";
+import { useToast } from "@/components/providers/ToastProvider";
+import { Sparkline } from "@/components/ui/Sparkline";
+import { FreshnessBadge, StanceBadge } from "@/components/ui/Status";
+import {
+  Badge,
+  Button,
+  Card,
+  EmptyState,
+  Input,
+  LinkButton,
+  LoadingRows,
+  Skeleton,
+  StatCard,
+  Table,
+  Td,
+  Th,
+  cx,
+} from "@/components/ui/core";
+import {
+  api,
+  type AlertOut,
+  type PaperPortfolioOut,
+  type PortfolioSummary,
+  type RankingRun,
+  type Regime,
+  type RiskStatus,
+  type StockSummary,
+} from "@/lib/api";
+import { ago, inr, pct, signedPct, toneOf, humanize } from "@/lib/format";
 
-const statusColor: Record<GateStatus, string> = {
-  PASS: "text-pass",
-  FAIL: "text-fail",
-  UNKNOWN: "text-unknown",
-};
-
-function Panel({ title, children }: { title: string; children: React.ReactNode }) {
-  return (
-    <section className="rounded-lg border border-line bg-panel p-5">
-      <h2 className="mb-4 text-xs font-semibold uppercase tracking-wider text-muted">{title}</h2>
-      {children}
-    </section>
-  );
+function greeting() {
+  const h = Number(new Date().toLocaleString("en-IN", { hour: "numeric", hour12: false, timeZone: "Asia/Kolkata" }));
+  return h < 12 ? "Good morning" : h < 17 ? "Good afternoon" : "Good evening";
 }
 
-function KillSwitchControl({
-  token, me, status, onChange,
-}: { token: string; me: Me; status: RiskStatus; onChange: () => void }) {
-  const [reason, setReason] = useState("");
-  const [error, setError] = useState<string | null>(null);
-  const active = status.kill_switch.active;
-  const canResume = me.role === "admin";
+function WatchlistCard({ stocks }: { stocks: StockSummary[] | null }) {
+  const { rows, error, toggle, has } = useWatchlist();
+  const toast = useToast();
+  const [adding, setAdding] = useState("");
+  const candidates = useMemo(() => (stocks ?? []).filter((s) => !has(s.ticker)), [stocks, has]);
 
-  async function toggle(nextActive: boolean) {
-    setError(null);
-    try {
-      await api.setKillSwitch(token, nextActive, reason);
-      setReason("");
-      onChange();
-    } catch (err) {
-      setError(err instanceof ApiError ? err.message : "Request failed");
+  async function add(e: React.FormEvent) {
+    e.preventDefault();
+    const t = adding.trim().toUpperCase();
+    if (!t) return;
+    if (!stocks?.some((s) => s.ticker === t)) {
+      toast({ tone: "warning", title: `${t} isn't in the universe yet`, body: "Pick a stock from the list, or ask an admin to add it on the Stocks page." });
+      return;
     }
+    await toggle(t);
+    setAdding("");
   }
 
   return (
-    <Panel title="Kill switch">
-      <p className={`mb-1 text-lg font-semibold ${active ? "text-fail" : "text-pass"}`}>
-        {active ? "ACTIVE — all trading halted" : "Inactive"}
-      </p>
-      <p className="mb-4 text-sm text-muted">{status.kill_switch.reason}</p>
-      <input
-        className="mb-3 w-full rounded border border-line bg-surface px-3 py-2 text-sm"
-        placeholder="Reason (required, min 5 chars)"
-        value={reason} onChange={(e) => setReason(e.target.value)}
-      />
-      <div className="flex gap-2">
-        <button
-          className="rounded bg-fail px-3 py-2 text-sm font-medium text-white disabled:opacity-40"
-          disabled={reason.trim().length < 5}
-          onClick={() => toggle(true)}
-        >
-          Halt trading
-        </button>
-        {active && canResume && (
-          <button
-            className="rounded border border-line px-3 py-2 text-sm disabled:opacity-40"
-            disabled={reason.trim().length < 5}
-            onClick={() => toggle(false)}
-          >
-            Resume (admin)
-          </button>
-        )}
+    <Card
+      title={
+        <span className="flex items-center gap-2">
+          <Star size={15} className="text-[#c98500]" fill="currentColor" aria-hidden /> Your watchlist
+        </span>
+      }
+      description="Last close, day change and 30-session trend. Stance comes from the latest research report."
+      actions={
+        <form onSubmit={add} className="flex gap-2">
+          <Input
+            list="watch-candidates"
+            value={adding}
+            onChange={(e) => setAdding(e.target.value)}
+            placeholder="Add ticker…"
+            aria-label="Add a stock to your watchlist"
+            className="h-8 w-36 font-mono text-xs uppercase"
+          />
+          <datalist id="watch-candidates">
+            {candidates.map((s) => (
+              <option key={s.ticker} value={s.ticker}>
+                {s.name ?? ""}
+              </option>
+            ))}
+          </datalist>
+          <Button size="sm" type="submit" icon={<Plus size={14} />} disabled={!adding.trim()}>
+            Add
+          </Button>
+        </form>
+      }
+      bodyClassName="pb-2"
+    >
+      {error && <p className="text-sm text-fail">{error}</p>}
+      {rows === null && !error && <LoadingRows rows={4} />}
+      {rows?.length === 0 && (
+        <EmptyState
+          icon={<Star size={20} />}
+          title="Nothing on your watchlist yet"
+          body="Star stocks on the Stocks page or add a ticker above to track them here."
+          action={<LinkButton href="/stocks" size="sm" icon={<Search size={14} />}>Browse stocks</LinkButton>}
+          compact
+        />
+      )}
+      {rows && rows.length > 0 && (
+        <Table>
+          <thead>
+            <tr>
+              <Th>Stock</Th>
+              <Th className="hidden sm:table-cell">Trend</Th>
+              <Th align="right">Last</Th>
+              <Th align="right">Day</Th>
+              <Th className="hidden md:table-cell">Research stance</Th>
+              <Th className="hidden 2xl:table-cell">Data</Th>
+              <Th />
+            </tr>
+          </thead>
+          <tbody>
+            {rows.map((r) => (
+              <tr key={r.ticker} className="group hover:bg-hover">
+                <Td>
+                  <Link href={`/stocks/${encodeURIComponent(r.ticker)}`} className="block">
+                    <span className="font-mono text-[13px] font-semibold">{r.ticker}</span>
+                    <span className="block max-w-[180px] truncate text-xs text-muted">{r.name ?? r.exchange}</span>
+                  </Link>
+                </Td>
+                <Td className="hidden sm:table-cell">
+                  <Sparkline values={r.sparkline} width={84} />
+                </Td>
+                <Td align="right" mono>
+                  {inr(r.last_close)}
+                </Td>
+                <Td align="right" mono className={toneOf(r.change_pct)}>
+                  {signedPct(r.change_pct)}
+                </Td>
+                <Td className="hidden md:table-cell" title={r.report_at ? `Report ${ago(r.report_at)}` : undefined}>
+                  <StanceBadge stance={r.stance} />
+                </Td>
+                <Td className="hidden 2xl:table-cell">
+                  <FreshnessBadge f={r.freshness} />
+                </Td>
+                <Td align="right">
+                  <WatchStar on ticker={r.ticker} onToggle={() => toggle(r.ticker)} />
+                </Td>
+              </tr>
+            ))}
+          </tbody>
+        </Table>
+      )}
+    </Card>
+  );
+}
+
+function ReadinessCard({ risk }: { risk: RiskStatus | null }) {
+  if (!risk) {
+    return (
+      <Card title="Execution readiness">
+        <LoadingRows rows={3} />
+      </Card>
+    );
+  }
+  const failing = risk.checks.filter((c) => c.status !== "PASS");
+  return (
+    <Card
+      title="Execution readiness"
+      description="Whether the system would accept an order right now."
+      actions={<LinkButton href="/system" size="sm" variant="ghost">Details <ArrowRight size={14} /></LinkButton>}
+    >
+      <div className="grid grid-cols-2 gap-3">
+        {[
+          ["Paper orders", risk.paper_orders_permitted],
+          ["Live orders", risk.live_orders_permitted],
+        ].map(([k, ok]) => (
+          <div key={String(k)} className="rounded-lg bg-sunken px-3 py-2.5">
+            <div className="text-xs text-muted">{k}</div>
+            <div className={cx("mt-0.5 flex items-center gap-1.5 text-sm font-medium", ok ? "text-pass" : "text-fail")}>
+              {ok ? <CheckCircle2 size={15} aria-hidden /> : <XCircle size={15} aria-hidden />}
+              {ok ? "Permitted" : "Blocked"}
+            </div>
+          </div>
+        ))}
       </div>
-      {error && <p className="mt-3 text-sm text-fail">{error}</p>}
-      <p className="mt-3 text-xs text-muted">
-        Resuming only clears the halt. It does not enable live trading.
-      </p>
-    </Panel>
+      {failing.length > 0 ? (
+        <ul className="mt-4 space-y-2 text-sm">
+          {failing.slice(0, 4).map((c) => (
+            <li key={c.name} className="flex gap-2">
+              {c.status === "FAIL" ? <XCircle size={15} className="mt-0.5 shrink-0 text-fail" aria-hidden /> : <CircleHelp size={15} className="mt-0.5 shrink-0 text-warn" aria-hidden />}
+              <span className="min-w-0">
+                <span className="block font-medium first-letter:uppercase">{humanize(c.name)}</span>
+                <span className="block text-xs text-muted">{c.reason}</span>
+              </span>
+            </li>
+          ))}
+        </ul>
+      ) : (
+        <p className="mt-4 flex items-center gap-2 text-sm text-pass">
+          <CheckCircle2 size={15} aria-hidden /> Every readiness check passes.
+        </p>
+      )}
+    </Card>
   );
 }
 
 export default function Dashboard() {
-  const [token, setToken] = useState<string | null>(null);
-  const [ready, setReady] = useState(false);
-  const [health, setHealth] = useState<Health | null>(null);
-  const [me, setMe] = useState<Me | null>(null);
+  usePageTitle("Dashboard");
+  const { me, guard, isAdmin } = useSession();
   const [risk, setRisk] = useState<RiskStatus | null>(null);
-  const [regime, setRegime] = useState<Regime | null>(null);
-  const [error, setError] = useState<string | null>(null);
-
-  useEffect(() => {
-    setToken(readToken());
-    setReady(true);
-  }, []);
-
-  const signOut = useCallback(() => {
-    writeToken(null);
-    setToken(null);
-    setMe(null);
-    setRisk(null);
-  }, []);
+  const [regime, setRegime] = useState<Regime | null | undefined>(undefined);
+  const [ranking, setRanking] = useState<RankingRun | null | undefined>(undefined);
+  const [paper, setPaper] = useState<{ pf: PortfolioSummary; data: PaperPortfolioOut } | null | undefined>(undefined);
+  const [alerts, setAlerts] = useState<{ unread: number; alerts: AlertOut[] } | null>(null);
+  const [stocks, setStocks] = useState<StockSummary[] | null>(null);
 
   const load = useCallback(async () => {
-    setError(null);
+    guard((t) => api.riskStatus(t)).then((r) => r && setRisk(r)).catch(() => {});
+    guard((t) => api.regime(t)).then((r) => r !== undefined && setRegime(r)).catch(() => setRegime(null));
+    guard((t) => api.latestRanking(t))
+      .then((r) => r !== undefined && setRanking(r))
+      .catch(() => setRanking(null)); // 404 = no ranking run yet
+    guard((t) => api.alerts(t, false, 5)).then((r) => r && setAlerts(r)).catch(() => {});
+    guard((t) => api.stocks(t)).then((s) => s && setStocks(s)).catch(() => setStocks([]));
     try {
-      setHealth(await api.health());
+      const pfs = await guard((t) => api.portfolios(t));
+      const pf = pfs?.find((p) => p.kind === "paper");
+      if (!pf) {
+        setPaper(null);
+        return;
+      }
+      const data = await guard((t) => api.paperPortfolio(t, pf.id));
+      setPaper(data ? { pf, data } : null);
     } catch {
-      setHealth(null);
-      setError("Cannot reach the Aegis API");
-      return;
+      setPaper(null);
     }
-    if (!token) return;
-    try {
-      const [m, r] = await Promise.all([api.me(token), api.riskStatus(token)]);
-      setMe(m);
-      setRisk(r);
-      api.regime(token).then(setRegime).catch(() => setRegime(null));
-    } catch (err) {
-      if (err instanceof ApiError && err.status === 401) signOut();
-      else setError(err instanceof Error ? err.message : "Request failed");
-    }
-  }, [token, signOut]);
+  }, [guard]);
 
   useEffect(() => {
-    if (!ready) return;
     void load();
-    const id = setInterval(load, 15_000);
-    return () => clearInterval(id);
-  }, [ready, load]);
+  }, [load]);
 
-  if (!ready) return null;
-  if (!token) {
-    return (
-      <Login
-        onToken={(t) => {
-          writeToken(t);
-          setToken(t);
-        }}
-      />
-    );
-  }
+  const name = me?.email.split("@")[0] ?? "";
+  const equity = paper?.data.analysis.metrics.equity ?? null;
+  const qualified = ranking?.rows?.filter((r) => r.qualified) ?? [];
+  const topRows = (ranking?.rows ?? []).slice(0, 5);
+  const regimeTone = !regime?.known ? "text-warn" : regime.risk === "risk_off" ? "text-fail" : regime.risk === "risk_on" ? "text-pass" : "";
 
   return (
-    <main className="mx-auto max-w-5xl px-4 py-8">
-      {health?.demo_data && (
-        <div className="mb-6 rounded border border-unknown bg-unknown/10 px-4 py-2 text-center text-sm font-semibold text-unknown">
-          DEMO DATA — NOT FOR TRADING
-        </div>
-      )}
-      <Nav mode={health?.system_mode} email={me?.email} role={me?.role} onSignOut={signOut} />
-
-      {error && <p className="mb-6 text-sm text-fail">{error}</p>}
-
-      <div className="grid gap-4 md:grid-cols-2">
-        <Panel title="Execution readiness">
-          {risk ? (
-            <>
-              <div className="mb-4 grid grid-cols-2 gap-3 text-sm">
-                <div>
-                  <div className="text-muted">Live orders</div>
-                  <div className={risk.live_orders_permitted ? "text-pass" : "text-fail"}>
-                    {risk.live_orders_permitted ? "Permitted" : "Blocked"}
-                  </div>
-                </div>
-                <div>
-                  <div className="text-muted">Paper orders</div>
-                  <div className={risk.paper_orders_permitted ? "text-pass" : "text-fail"}>
-                    {risk.paper_orders_permitted ? "Permitted" : "Blocked"}
-                  </div>
-                </div>
-              </div>
-              <table className="w-full text-sm">
-                <tbody>
-                  {risk.checks.map((c) => (
-                    <tr key={c.name} className="border-t border-line">
-                      <td className="py-1.5 pr-3 font-mono text-xs">{c.name}</td>
-                      <td className={`py-1.5 pr-3 font-mono text-xs ${statusColor[c.status]}`}>
-                        {c.status}
-                      </td>
-                      <td className="py-1.5 text-xs text-muted">{c.reason}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </>
-          ) : (
-            <p className="text-sm text-muted">Loading…</p>
-          )}
-        </Panel>
-
-        {risk && me && <KillSwitchControl token={token} me={me} status={risk} onChange={load} />}
-
-        <Panel title="Market regime">
-          {regime ? (
-            <>
-              <p
-                className={`mb-1 text-lg font-semibold ${
-                  !regime.known ? "text-unknown" : regime.risk === "risk_off" ? "text-fail" : regime.risk === "risk_on" ? "text-pass" : ""
-                }`}
-              >
-                {regime.label.replaceAll("_", " ")}
-              </p>
-              <p className="mb-3 text-sm text-muted">
-                Trend {regime.trend} · volatility {regime.volatility} · {regime.risk.replace("_", "-")}
-              </p>
-              <dl className="grid grid-cols-2 gap-y-1 text-xs">
-                {Object.entries(regime.evidence).map(([k, v]) => (
-                  <div key={k} className="contents">
-                    <dt className="text-muted">{k.replaceAll("_", " ")}</dt>
-                    <dd className="font-mono">{v === null ? "—" : v.toFixed(4)}</dd>
-                  </div>
-                ))}
-              </dl>
-              {!regime.known && (
-                <p className="mt-2 text-xs text-unknown">Regime unknown: macro series not ingested yet (admin: POST /macro/ingest).</p>
-              )}
-            </>
-          ) : (
-            <p className="text-sm text-muted">Loading…</p>
-          )}
-        </Panel>
-
-        <Panel title="Infrastructure">
-          {health ? (
-            <ul className="space-y-1 text-sm">
-              {health.components.map((c) => (
-                <li key={c.name} className="flex justify-between">
-                  <span>{c.name}</span>
-                  <span className={c.healthy ? "text-pass" : "text-fail"}>
-                    {c.healthy ? "healthy" : "unavailable"}
-                  </span>
-                </li>
-              ))}
-              <li className="flex justify-between text-muted">
-                <span>api version</span>
-                <span className="font-mono">{health.version}</span>
-              </li>
-            </ul>
-          ) : (
-            <p className="text-sm text-fail">API unreachable</p>
-          )}
-        </Panel>
-
-        <Panel title="Configuration">
-          {risk && (
-            <dl className="space-y-1 text-sm">
-              <div className="flex justify-between">
-                <dt className="text-muted">version</dt>
-                <dd className="font-mono">{risk.config_version}</dd>
-              </div>
-              <div className="flex justify-between gap-4">
-                <dt className="text-muted">fingerprint</dt>
-                <dd className="truncate font-mono text-xs">{risk.config_fingerprint}</dd>
-              </div>
-            </dl>
-          )}
-          <p className="mt-4 text-xs text-muted">
-            Market data lives under Stocks. Agent analyses are on each stock page; rankings arrive in a later
-            phase. Nothing on this page is a trade signal.
+    <div className="space-y-6">
+      <div className="flex flex-wrap items-end justify-between gap-4">
+        <div>
+          <p className="text-sm text-muted">
+            {new Date().toLocaleDateString("en-IN", { weekday: "long", day: "numeric", month: "long", timeZone: "Asia/Kolkata" })}
           </p>
-        </Panel>
+          <h1 className="mt-0.5 text-2xl font-semibold tracking-tight">
+            {greeting()}, <span className="capitalize">{name}</span>
+          </h1>
+        </div>
+        <div className="flex flex-wrap gap-2">
+          <LinkButton href="/stocks" icon={<Search size={15} />}>Research a stock</LinkButton>
+          <LinkButton href="/trade" variant="primary" icon={<ShieldCheck size={15} />}>New trade</LinkButton>
+        </div>
       </div>
 
-      {risk && <p className="mt-8 text-center text-xs text-muted">{risk.disclaimer}</p>}
-    </main>
+      <div className="grid grid-cols-2 gap-3 lg:grid-cols-4 lg:gap-4">
+        <StatCard
+          href="/paper"
+          icon={<Wallet size={14} aria-hidden />}
+          label="Paper equity"
+          value={paper === undefined ? <Skeleton className="h-7 w-28" /> : paper ? inr(equity, 0) : "—"}
+          sub={
+            paper ? (
+              <span className={toneOf(paper.data.total_return)}>{signedPct(paper.data.total_return)} since start</span>
+            ) : paper === null ? (
+              "No paper portfolio yet"
+            ) : undefined
+          }
+        />
+        <StatCard
+          href="/ranking"
+          icon={<Trophy size={14} aria-hidden />}
+          label="Qualified today"
+          value={ranking === undefined ? <Skeleton className="h-7 w-16" /> : ranking ? `${ranking.qualified}` : "—"}
+          sub={ranking ? `of ${ranking.evaluated} evaluated · ${ago(ranking.created_at ?? ranking.as_of)}` : ranking === null ? "No ranking run yet" : undefined}
+          tone={ranking && ranking.qualified > 0 ? "text-pass" : undefined}
+        />
+        <StatCard
+          href="/system"
+          icon={<Gauge size={14} aria-hidden />}
+          label="Market regime"
+          value={regime === undefined ? <Skeleton className="h-7 w-32" /> : regime ? <span className={cx("capitalize", regimeTone)}>{humanize(regime.label).toLowerCase()}</span> : "Unknown"}
+          sub={regime ? `Trend ${regime.trend} · volatility ${regime.volatility}` : "Macro series not ingested"}
+        />
+        <StatCard
+          href="/alerts"
+          icon={<Bell size={14} aria-hidden />}
+          label="Unread alerts"
+          value={alerts === null ? <Skeleton className="h-7 w-10" /> : alerts.unread}
+          sub={alerts?.alerts[0] ? `Latest ${ago(alerts.alerts[0].created_at)}` : "All caught up"}
+          tone={alerts && alerts.unread > 0 ? "text-warn" : undefined}
+        />
+      </div>
+
+      <div className="grid gap-6 xl:grid-cols-3">
+        <div className="space-y-6 xl:col-span-2">
+          <WatchlistCard stocks={stocks} />
+          {paper && paper.data.equity_curve.length > 1 && (
+            <Card
+              title={`Paper equity · ${paper.pf.name}`}
+              description="Marked to market after each session close."
+              actions={<LinkButton href="/paper" size="sm" variant="ghost">Open <ArrowRight size={14} /></LinkButton>}
+            >
+              <EquityChart data={paper.data.equity_curve.map((p) => ({ t: p.taken_at, equity: p.equity }))} />
+            </Card>
+          )}
+        </div>
+
+        <div className="space-y-6">
+          <Card
+            title="Top opportunities"
+            description={ranking ? ranking.headline : "Standardised candidates through the 24 gates."}
+            actions={<LinkButton href="/ranking" size="sm" variant="ghost">All <ArrowRight size={14} /></LinkButton>}
+          >
+            {ranking === undefined && <LoadingRows rows={4} />}
+            {ranking === null && (
+              <EmptyState
+                icon={<Trophy size={20} />}
+                title="No ranking yet"
+                body={isAdmin ? "Run one from the Opportunities page, or wait for the daily job after the close." : "It runs daily after the market close."}
+                compact
+              />
+            )}
+            {ranking && (
+              <ul className="-mx-2 space-y-0.5">
+                {topRows.map((r) => (
+                  <li key={r.ticker}>
+                    <Link href={`/stocks/${encodeURIComponent(r.ticker)}`} className="flex items-center gap-3 rounded-lg px-2 py-2 hover:bg-hover">
+                      <span className="w-5 text-right font-mono text-xs text-subtle">{r.rank}</span>
+                      <span className="min-w-0 flex-1">
+                        <span className="block font-mono text-[13px] font-semibold">{r.ticker}</span>
+                        <span className="block truncate text-xs text-muted">
+                          {r.qualified ? `P(profit) ${pct(r.p_profit)} · exp. ${signedPct(r.expected_net_return)}` : `Blocked: ${humanize(r.first_failure ?? "—")}`}
+                        </span>
+                      </span>
+                      {r.qualified ? (
+                        <Badge tone="pass" icon={<CheckCircle2 size={12} aria-hidden />}>Qualified</Badge>
+                      ) : (
+                        <Badge icon={<XCircle size={12} aria-hidden />}>Blocked</Badge>
+                      )}
+                    </Link>
+                  </li>
+                ))}
+                {topRows.length === 0 && <li className="px-2 text-sm text-muted">No candidates were evaluated.</li>}
+              </ul>
+            )}
+            {ranking && qualified.length === 0 && topRows.length > 0 && (
+              <p className="mt-3 text-xs text-muted">Nothing qualified — “no trade” is a valid, and common, answer.</p>
+            )}
+          </Card>
+
+          <Card
+            title="Recent alerts"
+            actions={<LinkButton href="/alerts" size="sm" variant="ghost">All <ArrowRight size={14} /></LinkButton>}
+          >
+            {alerts === null && <LoadingRows rows={3} />}
+            {alerts?.alerts.length === 0 && <EmptyState icon={<Bell size={20} />} title="No alerts" compact />}
+            <ul className="space-y-3">
+              {alerts?.alerts.map((a) => (
+                <li key={a.id} className="flex gap-3">
+                  <span
+                    className={cx(
+                      "mt-1.5 h-2 w-2 shrink-0 rounded-full",
+                      a.severity === "critical" ? "bg-fail" : a.severity === "warning" ? "bg-warn" : "bg-subtle",
+                    )}
+                    aria-hidden
+                  />
+                  <div className="min-w-0">
+                    <p className={cx("text-sm", a.read_at ? "text-muted" : "font-medium")}>
+                      <span className="sr-only">{a.severity}: </span>
+                      {a.title}
+                    </p>
+                    <p className="text-xs text-subtle">{ago(a.created_at)}</p>
+                  </div>
+                </li>
+              ))}
+            </ul>
+          </Card>
+
+          <ReadinessCard risk={risk} />
+        </div>
+      </div>
+    </div>
   );
 }
