@@ -397,7 +397,7 @@ export default function StockPage() {
                 )}
               </Card>
 
-              <div className="space-y-6">
+              <div className="min-w-0 space-y-6">
                 <ResearchSummary report={report} busy={reportBusy} onRun={runReport} onDownload={downloadReport} />
                 <ModelEstimateCard est={est} />
               </div>

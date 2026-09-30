@@ -27,6 +27,7 @@ of profit.
 | 13 | Model monitoring: PSI drift vs training data (null-calibrated), calibration decay on realised outcomes, auto-disable | **Done** ([report](docs/phase-13-report.md)) |
 | 14 | Security: global rate limits, request size limit, security headers, CORS fixes, production config checks; deployment (Caddy/TLS compose, runbook) | **Done** ([report](docs/phase-14-report.md), [deployment guide](docs/deployment.md)) |
 | 15 | Live-trading scaffolding: broker adapter interface, disabled by a build switch; tests prove live orders cannot be placed | **Done** ([report](docs/phase-15-report.md)) |
+| Web app | Redesigned console: light/dark themes, sidebar + ⌘K search, dashboard, watchlist, tabbed stock research, guided trade flow, team invites with forced password change | **Done** ([guide](docs/web-app.md)) |
 
 Market scope: **Indian equities only** (NSE `.NS`, BSE `.BO`).
 
@@ -96,7 +97,7 @@ cd backend
 ```
 backend/     FastAPI app, SQLAlchemy models, Alembic migrations, Celery, tests
 config/      aegis.yaml: trade gates, freshness, risk limits, sizing, costs
-frontend/    Next.js + Tailwind console
+frontend/    Next.js + Tailwind web app (see docs/web-app.md)
 docker/      Dockerfiles
 docs/        Phase reports and design notes
 ```
@@ -110,10 +111,16 @@ phase that first implements them, not as empty placeholders.
 |---|---|---|---|
 | GET | `/health` | none | DB/Redis health, mode, version |
 | POST | `/auth/token` | none | Login (rate limited, audited) |
-| GET | `/auth/me` | user | Current user |
+| GET | `/auth/me` | user | Current user (also reachable with a temporary password) |
+| POST | `/auth/change-password` | user | Replace your password; revokes older sessions, returns a fresh token |
+| GET, POST | `/users` | admin | List users; invite one (returns a one-time temporary password) |
+| PATCH | `/users/{id}` | admin | Change role or deactivate/reactivate (never the last admin, never yourself) |
+| POST | `/users/{id}/reset-password` | admin | Issue a new temporary password; signs the user out |
+| GET, POST | `/watchlist` | user | Your watchlist with last close, day change, sparkline, latest stance |
+| DELETE | `/watchlist/{ticker}` | user | Remove from your watchlist |
 | GET | `/risk/status` | user | Execution readiness, kill switch, config fingerprint |
 | POST | `/trading/kill-switch` | user / admin | Halt (any user) or resume (admin only) |
-| GET | `/stocks` | user | Universe with freshness |
+| GET | `/stocks` | user | Universe with freshness, last close, day change and 30-session sparkline |
 | POST | `/stocks` | admin | Add `TCS.NS` / `RELIANCE.BO` |
 | GET | `/stocks/{ticker}` | user | Latest bar, provenance, data quality, corporate actions, runs |
 | GET | `/stocks/{ticker}/prices` | user | `basis`, `start`, `end`, point-in-time `as_of` |

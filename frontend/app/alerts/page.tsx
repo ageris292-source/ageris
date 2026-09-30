@@ -1,46 +1,49 @@
 "use client";
 
+import { ArrowRight, Bell, CheckCheck, CheckCircle2, Info, Mail, MessageCircle, Smartphone, TriangleAlert, XCircle } from "lucide-react";
 import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
-import { Login } from "@/components/Login";
-import { Nav } from "@/components/Nav";
-import { useSession } from "@/components/useSession";
+import { usePageTitle } from "@/components/usePageTitle";
+import { useSession } from "@/components/providers/SessionProvider";
+import { useToast } from "@/components/providers/ToastProvider";
+import { Badge, Button, Card, EmptyState, LoadingRows, PageHeader, Segmented, cx, type Tone } from "@/components/ui/core";
 import { api, type AlertChannels, type AlertOut, type AlertSeverity } from "@/lib/api";
+import { ago, istDateTime } from "@/lib/format";
 
-// Severity is never color alone: icon + word + color.
-const SEV: Record<AlertSeverity, { cls: string; icon: string; word: string }> = {
-  critical: { cls: "border-fail/50 text-fail", icon: "✕", word: "Critical" },
-  warning: { cls: "border-unknown/50 text-unknown", icon: "!", word: "Warning" },
-  info: { cls: "border-line text-muted", icon: "i", word: "Info" },
+// Severity is never colour alone: icon + word + colour.
+const SEV: Record<AlertSeverity, { tone: Tone; icon: React.ReactNode; word: string; bar: string }> = {
+  critical: { tone: "fail", icon: <XCircle size={12} aria-hidden />, word: "Critical", bar: "bg-fail" },
+  warning: { tone: "warn", icon: <TriangleAlert size={12} aria-hidden />, word: "Warning", bar: "bg-warn" },
+  info: { tone: "neutral", icon: <Info size={12} aria-hidden />, word: "Info", bar: "bg-line-strong" },
 };
 
+type Filter = "all" | "unread" | "critical";
+
 export default function AlertsPage() {
-  const { token, ready, me, health, signIn, signOut, guard } = useSession();
-  const [items, setItems] = useState<AlertOut[]>([]);
+  usePageTitle("Alerts");
+  const { guard } = useSession();
+  const toast = useToast();
+  const [items, setItems] = useState<AlertOut[] | null>(null);
   const [unread, setUnread] = useState(0);
-  const [unreadOnly, setUnreadOnly] = useState(false);
+  const [filter, setFilter] = useState<Filter>("all");
   const [channels, setChannels] = useState<AlertChannels | null>(null);
-  const [msg, setMsg] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     try {
-      const [r, c] = await Promise.all([
-        guard((t) => api.alerts(t, unreadOnly, 200)),
-        guard((t) => api.alertChannels(t)),
-      ]);
+      const [r, c] = await Promise.all([guard((t) => api.alerts(t, filter === "unread", 200)), guard((t) => api.alertChannels(t))]);
       if (r) {
         setItems(r.alerts);
         setUnread(r.unread);
       }
       if (c) setChannels(c);
     } catch (err) {
-      setMsg(err instanceof Error ? err.message : "Request failed");
+      toast({ tone: "error", title: "Could not load alerts", body: err instanceof Error ? err.message : undefined });
     }
-  }, [guard, unreadOnly]);
+  }, [guard, filter, toast]);
 
   useEffect(() => {
-    if (token) void load();
-  }, [token, load]);
+    void load();
+  }, [load]);
 
   async function markRead(id?: number) {
     await guard<unknown>((t) => (id === undefined ? api.readAllAlerts(t) : api.readAlert(t, id)));
@@ -48,72 +51,109 @@ export default function AlertsPage() {
     await load();
   }
 
-  if (!ready) return null;
-  if (!token) return <Login onToken={signIn} />;
+  const shown = (items ?? []).filter((a) => filter !== "critical" || a.severity === "critical");
+
+  const channelRow = (icon: React.ReactNode, name: string, ch: { available: boolean; reason: string | null }) => (
+    <li className="flex items-start gap-3">
+      <span className="mt-0.5 text-subtle">{icon}</span>
+      <div className="min-w-0 flex-1">
+        <p className="text-sm font-medium">{name}</p>
+        {ch.reason && <p className="text-xs text-muted">{ch.reason}</p>}
+      </div>
+      {ch.available ? (
+        <Badge tone="pass" icon={<CheckCircle2 size={12} aria-hidden />}>On</Badge>
+      ) : (
+        <Badge icon={<XCircle size={12} aria-hidden />}>Off</Badge>
+      )}
+    </li>
+  );
 
   return (
-    <main className="mx-auto max-w-4xl px-4 py-8">
-      <Nav mode={health?.system_mode} email={me?.email} role={me?.role} onSignOut={signOut} />
-      <div className="mb-4 flex flex-wrap items-end justify-between gap-3">
-        <div>
-          <h2 className="mb-1 text-2xl font-semibold">Alerts</h2>
-          <p className="text-sm text-muted">{unread} unread. Alerts inform; they never trade.</p>
-        </div>
-        <div className="flex gap-2 text-sm">
-          <button className="rounded border border-line px-3 py-1.5" aria-pressed={unreadOnly} onClick={() => setUnreadOnly((v) => !v)}>
-            {unreadOnly ? "Show all" : "Unread only"}
-          </button>
-          <button className="rounded border border-line px-3 py-1.5 disabled:opacity-40" disabled={unread === 0} onClick={() => markRead()}>
+    <div className="space-y-6">
+      <PageHeader
+        title="Alerts"
+        description="Rankings, thesis events, model health and system changes. Alerts inform; they never trade."
+        actions={
+          <Button icon={<CheckCheck size={15} />} disabled={unread === 0} onClick={() => markRead()}>
             Mark all read
-          </button>
+          </Button>
+        }
+      />
+
+      <div className="grid gap-6 xl:grid-cols-3">
+        <div className="space-y-4 xl:col-span-2">
+          <Segmented<Filter>
+            label="Filter alerts"
+            size="md"
+            value={filter}
+            onChange={setFilter}
+            options={[
+              { value: "all", label: "All" },
+              { value: "unread", label: `Unread · ${unread}` },
+              { value: "critical", label: "Critical" },
+            ]}
+          />
+          {items === null && <LoadingRows rows={5} />}
+          {items && shown.length === 0 && (
+            <Card>
+              <EmptyState icon={<Bell size={20} />} title={filter === "unread" ? "You're all caught up" : "No alerts"} />
+            </Card>
+          )}
+          <ul className="space-y-3">
+            {shown.map((a) => {
+              const s = SEV[a.severity];
+              return (
+                <li key={a.id} className={cx("relative overflow-hidden rounded-xl border border-line bg-panel shadow-[var(--shadow-card)]", a.read_at && "opacity-70")}>
+                  <span className={cx("absolute inset-y-0 left-0 w-1", s.bar)} aria-hidden />
+                  <div className="p-4 pl-5">
+                    <div className="flex flex-wrap items-start justify-between gap-2">
+                      <div className="flex min-w-0 items-center gap-2">
+                        <Badge tone={s.tone} icon={s.icon}>{s.word}</Badge>
+                        {!a.read_at && <span className="h-2 w-2 rounded-full bg-accent" aria-label="Unread" />}
+                        <h2 className="min-w-0 text-sm font-semibold">{a.title}</h2>
+                      </div>
+                      <span className="text-xs text-subtle" title={istDateTime(a.created_at)}>{ago(a.created_at)}</span>
+                    </div>
+                    <p className="mt-2 whitespace-pre-line text-sm text-muted">{a.body}</p>
+                    <div className="mt-3 flex flex-wrap items-center gap-3 text-xs">
+                      {a.link && (
+                        <Link href={a.link} className="inline-flex items-center gap-1 font-medium text-accent hover:underline" onClick={() => !a.read_at && void markRead(a.id)}>
+                          Open <ArrowRight size={12} />
+                        </Link>
+                      )}
+                      {Object.keys(a.deliveries).length > 0 && (
+                        <span className="text-subtle">
+                          {Object.entries(a.deliveries).map(([k, v]) => `${k}: ${v}`).join(" · ")}
+                        </span>
+                      )}
+                      {!a.read_at && (
+                        <button className="ml-auto font-medium text-muted hover:text-ink" onClick={() => markRead(a.id)}>
+                          Mark read
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                </li>
+              );
+            })}
+          </ul>
         </div>
+
+        <Card title="Delivery channels" description={channels ? `Pushes at ${channels.min_severity_to_push} and above.` : undefined}>
+          {channels ? (
+            <ul className="space-y-4">
+              {channelRow(<Smartphone size={16} />, "In-app", { available: true, reason: "Always on" })}
+              {channelRow(<MessageCircle size={16} />, "Telegram", channels.telegram)}
+              {channelRow(<Mail size={16} />, "Email", channels.email)}
+            </ul>
+          ) : (
+            <LoadingRows rows={3} />
+          )}
+          <p className="mt-5 border-t border-line pt-4 text-xs text-muted">
+            Telegram and email are configured on the server (AEGIS_TELEGRAM_* and AEGIS_SMTP_URL). Secrets never reach the browser.
+          </p>
+        </Card>
       </div>
-      {msg && <p className="mb-4 text-sm text-fail">{msg}</p>}
-
-      {channels && (
-        <p className="mb-4 text-xs text-muted">
-          Channels: in-app ✓ ·{" "}
-          {(["telegram", "email"] as const).map((k) => (
-            <span key={k} title={channels[k].reason ?? undefined} className="mr-2">
-              {k} {channels[k].available ? "✓" : "✕ off"}
-            </span>
-          ))}
-          · pushes at {channels.min_severity_to_push} and above
-        </p>
-      )}
-
-      <ul className="space-y-2">
-        {items.map((a) => {
-          const s = SEV[a.severity];
-          return (
-            <li key={a.id} className={`rounded-lg border bg-panel p-4 ${a.read_at ? "border-line opacity-70" : "border-line"}`}>
-              <div className="flex flex-wrap items-start justify-between gap-2">
-                <div className="flex items-center gap-2">
-                  <span className={`inline-flex items-center gap-1 rounded border px-1.5 py-0.5 text-xs ${s.cls}`}>
-                    <span aria-hidden>{s.icon}</span>
-                    {s.word}
-                  </span>
-                  <span className="font-semibold">{a.title}</span>
-                </div>
-                <span className="text-xs text-muted">
-                  {a.created_at ? new Date(a.created_at).toLocaleString("en-IN", { timeZone: "Asia/Kolkata" }) : ""}
-                </span>
-              </div>
-              <p className="mt-2 whitespace-pre-line text-sm text-muted">{a.body}</p>
-              <div className="mt-2 flex flex-wrap items-center gap-3 text-xs text-muted">
-                {a.link && <Link className="underline" href={a.link}>Open</Link>}
-                <span>
-                  {Object.entries(a.deliveries).map(([k, v]) => `${k}: ${v}`).join(" · ")}
-                </span>
-                {!a.read_at && (
-                  <button className="ml-auto underline" onClick={() => markRead(a.id)}>Mark read</button>
-                )}
-              </div>
-            </li>
-          );
-        })}
-        {items.length === 0 && <li className="text-sm text-muted">No alerts.</li>}
-      </ul>
-    </main>
+    </div>
   );
 }

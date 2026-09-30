@@ -152,7 +152,7 @@ export function LoginScreen() {
 }
 
 export function ChangePasswordForm({ forced, onDone }: { forced?: boolean; onDone?: () => void }) {
-  const { guard, signIn, refreshMe } = useSession();
+  const { guard, signIn } = useSession();
   const [current, setCurrent] = useState("");
   const [next, setNext] = useState("");
   const [confirm, setConfirm] = useState("");
@@ -169,8 +169,7 @@ export function ChangePasswordForm({ forced, onDone }: { forced?: boolean; onDon
     try {
       const r = await guard((t) => api.changePassword(t, current, next));
       if (r) {
-        signIn(r.access_token);
-        await refreshMe();
+        signIn(r.access_token); // the session re-reads the profile for the new token
         setCurrent("");
         setNext("");
         setConfirm("");

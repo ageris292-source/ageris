@@ -135,7 +135,7 @@ function WatchlistCard({ stocks }: { stocks: StockSummary[] | null }) {
                 <Td>
                   <Link href={`/stocks/${encodeURIComponent(r.ticker)}`} className="block">
                     <span className="font-mono text-[13px] font-semibold">{r.ticker}</span>
-                    <span className="block max-w-[180px] truncate text-xs text-muted">{r.name ?? r.exchange}</span>
+                    <span className="block max-w-[110px] truncate text-xs text-muted sm:max-w-[180px]">{r.name ?? r.exchange}</span>
                   </Link>
                 </Td>
                 <Td className="hidden sm:table-cell">
@@ -314,7 +314,7 @@ export default function Dashboard() {
       </div>
 
       <div className="grid gap-6 xl:grid-cols-3">
-        <div className="space-y-6 xl:col-span-2">
+        <div className="min-w-0 space-y-6 xl:col-span-2">
           <WatchlistCard stocks={stocks} />
           {paper && paper.data.equity_curve.length > 1 && (
             <Card
@@ -327,7 +327,7 @@ export default function Dashboard() {
           )}
         </div>
 
-        <div className="space-y-6">
+        <div className="min-w-0 space-y-6">
           <Card
             title="Top opportunities"
             description={ranking ? ranking.headline : "Standardised candidates through the 24 gates."}

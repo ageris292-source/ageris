@@ -251,7 +251,7 @@ export default function StocksPage() {
                   <Td>
                     <Link href={`/stocks/${encodeURIComponent(s.ticker)}`} onClick={(e) => e.stopPropagation()} className="block">
                       <span className="font-mono text-[13px] font-semibold">{s.ticker}</span>
-                      <span className="block max-w-[260px] truncate text-xs text-muted">{s.name ?? `${s.exchange} · name not reported`}</span>
+                      <span className="block max-w-[140px] truncate text-xs text-muted sm:max-w-[260px]">{s.name ?? `${s.exchange} · name not reported`}</span>
                     </Link>
                   </Td>
                   <Td className="hidden md:table-cell">
