@@ -1,13 +1,158 @@
 "use client";
 
-import { KeyRound, LogOut, Monitor, Moon, Sun, UserRound } from "lucide-react";
+import { Download, KeyRound, LogOut, Monitor, Moon, ShieldAlert, ShieldCheck, Sun, UserRound, XCircle } from "lucide-react";
+import Link from "next/link";
+import { useCallback, useEffect, useState } from "react";
 import { ChangePasswordForm } from "@/components/shell/AuthScreens";
 import { usePageTitle } from "@/components/usePageTitle";
 import { useSession } from "@/components/providers/SessionProvider";
 import { useTheme, type ThemePref } from "@/components/providers/ThemeProvider";
 import { useToast } from "@/components/providers/ToastProvider";
-import { Badge, Button, Card, KeyValues, PageHeader, cx } from "@/components/ui/core";
-import { istDateTime } from "@/lib/format";
+import { ConfirmDialog } from "@/components/ui/Dialog";
+import { Badge, Button, Card, KeyValues, LoadingRows, PageHeader, cx } from "@/components/ui/core";
+import { api, ApiError, type ExportKind, type SignInItem } from "@/lib/api";
+import { ago, istDateTime } from "@/lib/format";
+
+/** A short, human label for a browser user-agent string. */
+function device(agent: string | null): string {
+  if (!agent) return "Unknown device";
+  if (/python|curl|httpx|okhttp/i.test(agent)) return "Script or API client";
+  const os = /iPhone|iPad/.test(agent) ? "iPhone/iPad" : /Android/.test(agent) ? "Android" : /Mac OS X/.test(agent) ? "Mac" : /Windows/.test(agent) ? "Windows" : /Linux/.test(agent) ? "Linux" : "Other";
+  const br = /Edg\//.test(agent) ? "Edge" : /Chrome\//.test(agent) ? "Chrome" : /Firefox\//.test(agent) ? "Firefox" : /Safari\//.test(agent) ? "Safari" : /python|curl|httpx|okhttp/i.test(agent) ? "Script" : "Browser";
+  return `${br} on ${os}`;
+}
+
+const ACTION_LABEL: Record<string, string> = {
+  "auth.login": "Signed in",
+  "auth.login_failed": "Failed sign-in attempt",
+  "auth.logout_all": "Signed out everywhere",
+  "user.change_password": "Password changed",
+};
+
+function SecurityCard() {
+  const { guard, token, signIn } = useSession();
+  const toast = useToast();
+  const [items, setItems] = useState<SignInItem[] | null>(null);
+  const [failed, setFailed] = useState(0);
+  const [confirm, setConfirm] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const load = useCallback(async () => {
+    try {
+      const r = await guard((t) => api.signIns(t));
+      if (r) {
+        setItems(r.items);
+        setFailed(r.failed_recent);
+      }
+    } catch {
+      setItems([]);
+    }
+  }, [guard]);
+  useEffect(() => {
+    if (token) void load();
+  }, [token, load]);
+
+  return (
+    <Card
+      title={<span className="flex items-center gap-2"><ShieldCheck size={15} aria-hidden /> Sign-in activity</span>}
+      description="Your recent sign-ins and any failed attempts on your email."
+      actions={
+        <Button variant="danger" size="sm" icon={<LogOut size={14} />} onClick={() => setConfirm(true)}>
+          Sign out everywhere
+        </Button>
+      }
+    >
+      {failed > 0 && (
+        <p className="mb-3 flex items-center gap-2 rounded-lg bg-warn-soft px-3 py-2 text-xs text-warn">
+          <ShieldAlert size={14} aria-hidden /> {failed} failed attempt{failed > 1 ? "s" : ""} in this list. If that wasn&apos;t you, change your password.
+        </p>
+      )}
+      {items === null ? (
+        <LoadingRows rows={3} />
+      ) : items.length === 0 ? (
+        <p className="text-sm text-muted">No sign-ins recorded yet.</p>
+      ) : (
+        <ul className="divide-y divide-line">
+          {items.slice(0, 10).map((i) => (
+            <li key={i.id} className="flex items-center gap-3 py-2.5 text-sm">
+              {i.action === "auth.login_failed" ? <XCircle size={15} className="shrink-0 text-fail" aria-hidden /> : <ShieldCheck size={15} className="shrink-0 text-pass" aria-hidden />}
+              <div className="min-w-0 flex-1">
+                <p className="truncate">{ACTION_LABEL[i.action] ?? i.action}{i.action.startsWith("auth.login") && ` · ${device(i.agent)}`}</p>
+                <p className="text-xs text-muted">{i.client ? `IP ${i.client} · ` : ""}{istDateTime(i.occurred_at)}</p>
+              </div>
+              <span className="shrink-0 text-xs text-subtle">{ago(i.occurred_at)}</span>
+            </li>
+          ))}
+        </ul>
+      )}
+      <p className="mt-3 text-xs text-subtle">
+        Full history: <Link href="/activity" className="-my-3 inline-block py-3 text-accent hover:underline">Activity log</Link>
+      </p>
+      <ConfirmDialog
+        open={confirm}
+        onClose={() => setConfirm(false)}
+        title="Sign out on every device?"
+        body="Every session for your account ends now, including other phones and browsers. This device stays signed in."
+        confirmLabel="Sign out everywhere"
+        tone="danger"
+        busy={busy}
+        onConfirm={async () => {
+          setBusy(true);
+          try {
+            const r = await guard((t) => api.logoutEverywhere(t));
+            if (r) signIn(r.access_token);
+            toast({ tone: "success", title: "Signed out everywhere else" });
+            setConfirm(false);
+            void load();
+          } catch (err) {
+            toast({ tone: "error", title: "Could not sign out other sessions", body: err instanceof ApiError ? err.message : undefined });
+          } finally {
+            setBusy(false);
+          }
+        }}
+      />
+    </Card>
+  );
+}
+
+const EXPORTS: { kind: ExportKind; label: string; hint: string }[] = [
+  { kind: "watchlist", label: "Watchlist", hint: "Your first list" },
+  { kind: "journal", label: "Journal", hint: "Notes and trade journal" },
+  { kind: "price-alerts", label: "Price alerts", hint: "Your rules and their status" },
+  { kind: "activity", label: "Activity", hint: "Your audit trail" },
+];
+
+function ExportsCard() {
+  const { guard } = useSession();
+  const toast = useToast();
+  const [busy, setBusy] = useState<ExportKind | null>(null);
+  return (
+    <Card title={<span className="flex items-center gap-2"><Download size={15} aria-hidden /> Your data</span>} description="Download CSV files that open in Excel or Google Sheets. Paper-trading exports are on the Paper trading page.">
+      <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+        {EXPORTS.map((x) => (
+          <button
+            key={x.kind}
+            type="button"
+            disabled={busy === x.kind}
+            onClick={async () => {
+              setBusy(x.kind);
+              try {
+                await guard((t) => api.exportCsv(t, x.kind));
+              } catch (err) {
+                toast({ tone: "error", title: "Export failed", body: err instanceof ApiError ? err.message : undefined });
+              } finally {
+                setBusy(null);
+              }
+            }}
+            className="flex flex-col items-start gap-1 rounded-xl border border-line p-3.5 text-left transition-colors hover:bg-hover disabled:opacity-50"
+          >
+            <span className="flex items-center gap-1.5 text-sm font-medium"><Download size={14} aria-hidden /> {x.label}</span>
+            <span className="text-xs text-muted">{x.hint}</span>
+          </button>
+        ))}
+      </div>
+    </Card>
+  );
+}
 
 const THEMES: { v: ThemePref; label: string; icon: React.ReactNode; hint: string }[] = [
   { v: "light", label: "Light", icon: <Sun size={18} />, hint: "Bright and crisp" },
@@ -23,7 +168,7 @@ export default function AccountPage() {
 
   return (
     <div className="space-y-6">
-      <PageHeader title="Account settings" description="Your profile, password and display preferences." />
+      <PageHeader title="Account settings" description="Your profile, password, security and display preferences." />
 
       <div className="grid gap-6 xl:grid-cols-3">
         <Card title={<span className="flex items-center gap-2"><UserRound size={15} aria-hidden /> Profile</span>}>
@@ -51,6 +196,8 @@ export default function AccountPage() {
         </Card>
       </div>
 
+      <SecurityCard />
+
       <Card title="Appearance" description="Saved on this device.">
         <div role="radiogroup" aria-label="Theme" className="grid gap-3 sm:grid-cols-3">
           {THEMES.map((t) => (
@@ -73,6 +220,8 @@ export default function AccountPage() {
           ))}
         </div>
       </Card>
+
+      <ExportsCard />
 
       <Card title="Keyboard shortcuts" className="hidden sm:block">
         <ul className="grid gap-3 text-sm sm:grid-cols-2">

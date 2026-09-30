@@ -410,6 +410,12 @@ export const Input = forwardRef<HTMLInputElement, React.InputHTMLAttributes<HTML
   return <input ref={ref} className={cx(control, "h-11 sm:h-9", className)} {...rest} />;
 });
 
+export const Textarea = forwardRef<HTMLTextAreaElement, React.TextareaHTMLAttributes<HTMLTextAreaElement>>(
+  function Textarea({ className, rows = 4, ...rest }, ref) {
+    return <textarea ref={ref} rows={rows} className={cx(control, "min-h-[6rem] py-2.5 leading-relaxed", className)} {...rest} />;
+  },
+);
+
 export function Select({ className, children, ...rest }: React.SelectHTMLAttributes<HTMLSelectElement>) {
   return (
     <select className={cx(control, "h-11 pr-8 sm:h-9", className)} {...rest}>

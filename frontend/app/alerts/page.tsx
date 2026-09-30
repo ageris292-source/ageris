@@ -1,13 +1,14 @@
 "use client";
 
-import { ArrowRight, Bell, CheckCheck, CheckCircle2, Info, Mail, MessageCircle, Smartphone, TriangleAlert, XCircle } from "lucide-react";
+import { ArrowRight, Bell, BellPlus, CheckCheck, CheckCircle2, Info, Mail, MessageCircle, Smartphone, TriangleAlert, UserRound, XCircle } from "lucide-react";
 import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 import { usePageTitle } from "@/components/usePageTitle";
 import { useSession } from "@/components/providers/SessionProvider";
 import { useToast } from "@/components/providers/ToastProvider";
-import { Badge, Button, Card, EmptyState, LoadingRows, PageHeader, Segmented, cx, type Tone } from "@/components/ui/core";
-import { api, type AlertChannels, type AlertOut, type AlertSeverity } from "@/lib/api";
+import { CheckNowButton, NewPriceAlertDialog, PriceAlertList } from "@/components/PriceAlerts";
+import { Badge, Button, Card, EmptyState, LoadingRows, PageHeader, Segmented, Tabs, cx, type Tone } from "@/components/ui/core";
+import { api, type AlertChannels, type AlertOut, type AlertSeverity, type StockSummary } from "@/lib/api";
 import { ago, istDateTime } from "@/lib/format";
 
 // Severity is never colour alone: icon + word + colour.
@@ -21,12 +22,26 @@ type Filter = "all" | "unread" | "critical";
 
 export default function AlertsPage() {
   usePageTitle("Alerts");
-  const { guard } = useSession();
+  const { guard, token } = useSession();
   const toast = useToast();
   const [items, setItems] = useState<AlertOut[] | null>(null);
   const [unread, setUnread] = useState(0);
   const [filter, setFilter] = useState<Filter>("all");
   const [channels, setChannels] = useState<AlertChannels | null>(null);
+  const [tab, setTab] = useState<"inbox" | "rules">("inbox");
+  const [newRule, setNewRule] = useState(false);
+  const [stocks, setStocks] = useState<StockSummary[] | null>(null);
+
+  useEffect(() => {
+    if (!token || tab !== "rules" || stocks) return;
+    guard((t) => api.stocks(t))
+      .then((r) => r && setStocks(r))
+      .catch(() => setStocks([]));
+  }, [guard, token, tab, stocks]);
+
+  useEffect(() => {
+    if (typeof window !== "undefined" && window.location.hash === "#price-alerts") setTab("rules");
+  }, []);
 
   const load = useCallback(async () => {
     try {
@@ -72,16 +87,45 @@ export default function AlertsPage() {
     <div className="space-y-6">
       <PageHeader
         title="Alerts"
-        description="Rankings, thesis events, model health and system changes. Alerts inform; they never trade."
+        description="Rankings, thesis events, model health, system changes and your own price alerts. Alerts inform; they never trade."
         actions={
-          <Button icon={<CheckCheck size={15} />} disabled={unread === 0} onClick={() => markRead()}>
-            Mark all read
-          </Button>
+          tab === "inbox" ? (
+            <Button icon={<CheckCheck size={15} />} disabled={unread === 0} onClick={() => markRead()}>
+              Mark all read
+            </Button>
+          ) : (
+            <>
+              <CheckNowButton />
+              <Button variant="primary" icon={<BellPlus size={15} />} onClick={() => setNewRule(true)}>
+                New price alert
+              </Button>
+            </>
+          )
         }
       />
 
-      <div className="grid gap-6 xl:grid-cols-3">
-        <div className="space-y-4 xl:col-span-2">
+      <Tabs
+        label="Alerts sections"
+        value={tab}
+        onChange={setTab}
+        tabs={[
+          { value: "inbox", label: "Inbox", badge: unread > 0 ? <span className="rounded-full bg-fail px-1.5 text-[10px] font-semibold leading-[18px] text-white">{unread}</span> : undefined },
+          { value: "rules", label: "My price alerts" },
+        ]}
+      />
+
+      {tab === "rules" && (
+        <Card
+          title="My price alerts"
+          description="Checked against each new end-of-day close (after the evening price updates). Only fresh data is used; a stale stock is skipped, never guessed. Private to you."
+        >
+          <PriceAlertList />
+        </Card>
+      )}
+      <NewPriceAlertDialog open={newRule} onClose={() => setNewRule(false)} stocks={stocks} />
+
+      <div className={cx("grid gap-6 xl:grid-cols-3", tab !== "inbox" && "hidden")}>
+        <div className="min-w-0 space-y-4 xl:col-span-2">
           <Segmented<Filter>
             label="Filter alerts"
             size="md"
@@ -107,9 +151,10 @@ export default function AlertsPage() {
                   <span className={cx("absolute inset-y-0 left-0 w-1", s.bar)} aria-hidden />
                   <div className="p-4 pl-5">
                     <div className="flex flex-wrap items-start justify-between gap-2">
-                      <div className="flex min-w-0 items-center gap-2">
+                      <div className="flex min-w-0 flex-wrap items-center gap-2">
                         <Badge tone={s.tone} icon={s.icon}>{s.word}</Badge>
                         {!a.read_at && <span className="h-2 w-2 rounded-full bg-accent" aria-label="Unread" />}
+                        {a.personal && <Badge icon={<UserRound size={12} aria-hidden />}>Just you</Badge>}
                         <h2 className="min-w-0 text-sm font-semibold">{a.title}</h2>
                       </div>
                       <span className="text-xs text-subtle" title={istDateTime(a.created_at)}>{ago(a.created_at)}</span>

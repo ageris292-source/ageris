@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import logging
 import smtplib
+import uuid
 from datetime import date
 from email.message import EmailMessage
 from typing import Any, Protocol
@@ -120,6 +121,7 @@ def raise_alert(
     body: str,
     dedupe_key: str,
     link: str | None = None,
+    user_id: uuid.UUID | None = None,
 ) -> Alert | None:
     """Store an alert once per dedupe key (flush, caller commits), then push
     it to configured channels if severe enough. Returns None for a duplicate,
@@ -137,6 +139,7 @@ def raise_alert(
         link=link,
         dedupe_key=key,
         deliveries={"in_app": "stored"},
+        user_id=user_id,
     )
     try:
         with db.begin_nested():  # a concurrent duplicate loses the race quietly

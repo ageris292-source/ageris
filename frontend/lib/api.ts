@@ -65,6 +65,7 @@ export interface WatchlistRow {
   exchange: string;
   note: string | null;
   added_at: string;
+  list_id: number;
   latest_session: string | null;
   last_close: number | null;
   prev_close: number | null;
@@ -644,6 +645,7 @@ export interface AlertOut {
   link: string | null;
   deliveries: Record<string, string>;
   read_at: string | null;
+  personal?: boolean;
 }
 
 export interface AlertChannels {
@@ -786,6 +788,155 @@ export interface CostResult {
   notice: string;
 }
 
+// ---------------------------------------------------------------- user features
+
+export interface WatchlistList {
+  id: number;
+  name: string;
+  position: number;
+  count: number;
+  created_at: string;
+}
+
+export type PriceCondition =
+  | "price_above"
+  | "price_below"
+  | "day_change_up"
+  | "day_change_down"
+  | "rsi_above"
+  | "rsi_below";
+
+export interface PriceAlertRule {
+  id: number;
+  ticker: string;
+  name: string | null;
+  condition: PriceCondition;
+  threshold: number;
+  description: string;
+  note: string | null;
+  repeat: boolean;
+  importance: "normal" | "high";
+  is_active: boolean;
+  armed: boolean;
+  created_at: string;
+  last_checked_at: string | null;
+  last_session: string | null;
+  last_value: number | null;
+  last_status: string | null;
+  last_triggered_at: string | null;
+  trigger_count: number;
+}
+
+export interface PriceAlertIn {
+  ticker: string;
+  condition: PriceCondition;
+  threshold: number;
+  note?: string | null;
+  repeat?: boolean;
+  importance?: "normal" | "high";
+}
+
+export type JournalKind = "note" | "entry" | "exit" | "review";
+
+export interface JournalEntryOut {
+  id: number;
+  kind: JournalKind;
+  title: string | null;
+  body: string;
+  tags: string[];
+  ticker: string | null;
+  stock_name: string | null;
+  order: {
+    id: number;
+    side: "buy" | "sell";
+    quantity: number;
+    limit_price: string;
+    status: string;
+    created_at: string | null;
+  } | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface JournalIn {
+  ticker?: string | null;
+  order_id?: number | null;
+  kind?: JournalKind;
+  title?: string | null;
+  body: string;
+  tags?: string[];
+}
+
+export interface ActivityItem {
+  id: number;
+  occurred_at: string;
+  action: string;
+  actor_id: string | null;
+  actor_email: string | null;
+  entity_type: string | null;
+  entity_id: string | null;
+  system_mode: string;
+  details: Record<string, unknown>;
+}
+
+export interface ActivityPage {
+  scope: "all" | "me";
+  items: ActivityItem[];
+  next_before_id: number | null;
+  groups: Record<string, string>;
+}
+
+export interface SignInItem {
+  id: number;
+  occurred_at: string;
+  action: string;
+  client: string | null;
+  agent: string | null;
+}
+
+export interface PaperPerformance {
+  portfolio: { id: number; name: string; starting_cash: number };
+  as_of: string;
+  trades: {
+    fills: number;
+    closed: number;
+    wins: number;
+    losses: number;
+    win_rate: number | null;
+    avg_win: number | null;
+    avg_loss: number | null;
+    profit_factor: number | null;
+    best: number | null;
+    worst: number | null;
+    realised_pnl: number;
+    fees_paid: number;
+  };
+  equity: {
+    points: number;
+    last_equity: number | null;
+    total_return: number | null;
+    max_drawdown: number | null;
+  };
+  benchmark: {
+    series: string;
+    available: boolean;
+    return: number | null;
+    excess_return: number | null;
+  };
+  curve: { date: string; equity: number; portfolio_index: number | null; benchmark_index: number | null }[];
+  by_ticker: { ticker: string; trades: number; wins: number; realised_pnl: number }[];
+}
+
+export type ExportKind =
+  | "orders"
+  | "fills"
+  | "positions"
+  | "equity"
+  | "watchlist"
+  | "journal"
+  | "price-alerts"
+  | "activity";
+
 export class ApiError extends Error {
   constructor(public status: number, message: string) {
     super(message);
@@ -825,6 +976,41 @@ const json = (body: unknown): RequestInit => ({
   body: JSON.stringify(body),
 });
 
+/** Download a CSV export (the API needs the bearer token, so no plain link). */
+async function downloadCsv(path: string, token: string, fallbackName: string): Promise<void> {
+  const res = await fetch(`${API_URL}${path}`, {
+    headers: { Authorization: `Bearer ${token}` },
+    cache: "no-store",
+  });
+  if (!res.ok) {
+    let detail = res.statusText || `HTTP ${res.status}`;
+    try {
+      const b = await res.json();
+      detail = typeof b.detail === "string" ? b.detail : detail;
+    } catch {
+      /* not JSON */
+    }
+    throw new ApiError(res.status, detail);
+  }
+  const cd = res.headers.get("content-disposition") ?? "";
+  const name = /filename="([^"]+)"/.exec(cd)?.[1] ?? fallbackName;
+  const url = URL.createObjectURL(await res.blob());
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = name;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
+
+const qs = (params: Record<string, string | number | boolean | null | undefined>) => {
+  const u = new URLSearchParams();
+  for (const [k, v] of Object.entries(params)) if (v !== null && v !== undefined && v !== "") u.set(k, String(v));
+  const t = u.toString();
+  return t ? `?${t}` : "";
+};
+
 const patch = (body: unknown): RequestInit => ({
   method: "PATCH",
   headers: { "Content-Type": "application/json" },
@@ -841,11 +1027,52 @@ export const api = {
     request<UserAdmin>(`/users/${id}`, patch(body), token),
   resetUserPassword: (token: string, id: string) =>
     request<InviteResult>(`/users/${id}/reset-password`, { method: "POST" }, token),
-  watchlist: (token: string) => request<WatchlistRow[]>("/watchlist", {}, token),
-  watch: (token: string, ticker: string, note?: string) =>
-    request<WatchlistRow>("/watchlist", json({ ticker, note: note || null }), token),
-  unwatch: (token: string, ticker: string) =>
-    request<void>(`/watchlist/${encodeURIComponent(ticker)}`, { method: "DELETE" }, token),
+  watchlist: (token: string, listId?: number | null) =>
+    request<WatchlistRow[]>(`/watchlist${qs({ list_id: listId })}`, {}, token),
+  watch: (token: string, ticker: string, note?: string, listId?: number | null) =>
+    request<WatchlistRow>("/watchlist", json({ ticker, note: note || null, list_id: listId ?? null }), token),
+  unwatch: (token: string, ticker: string, listId?: number | null) =>
+    request<void>(`/watchlist/${encodeURIComponent(ticker)}${qs({ list_id: listId })}`, { method: "DELETE" }, token),
+  watchMembership: (token: string, ticker: string) =>
+    request<number[]>(`/watchlist/membership/${encodeURIComponent(ticker)}`, {}, token),
+  watchlists: (token: string) => request<WatchlistList[]>("/watchlists", {}, token),
+  createWatchlist: (token: string, name: string) => request<WatchlistList>("/watchlists", json({ name }), token),
+  updateWatchlist: (token: string, id: number, body: { name?: string; position?: number }) =>
+    request<WatchlistList>(`/watchlists/${id}`, patch(body), token),
+  deleteWatchlist: (token: string, id: number) => request<void>(`/watchlists/${id}`, { method: "DELETE" }, token),
+
+  priceAlerts: (token: string, ticker?: string) =>
+    request<PriceAlertRule[]>(`/price-alerts${qs({ ticker })}`, {}, token),
+  createPriceAlert: (token: string, body: PriceAlertIn) =>
+    request<PriceAlertRule>("/price-alerts", json(body), token),
+  updatePriceAlert: (
+    token: string,
+    id: number,
+    body: Partial<Pick<PriceAlertRule, "threshold" | "note" | "repeat" | "importance" | "is_active">>,
+  ) => request<PriceAlertRule>(`/price-alerts/${id}`, patch(body), token),
+  deletePriceAlert: (token: string, id: number) =>
+    request<void>(`/price-alerts/${id}`, { method: "DELETE" }, token),
+  checkPriceAlerts: (token: string) =>
+    request<{ checked: number; fired: number }>("/price-alerts/check", { method: "POST" }, token),
+
+  journal: (
+    token: string,
+    f: { ticker?: string; kind?: JournalKind; order_id?: number; tag?: string; q?: string; limit?: number } = {},
+  ) => request<JournalEntryOut[]>(`/journal${qs(f)}`, {}, token),
+  createJournal: (token: string, body: JournalIn) => request<JournalEntryOut>("/journal", json(body), token),
+  updateJournal: (token: string, id: number, body: Partial<Omit<JournalIn, "ticker" | "order_id">>) =>
+    request<JournalEntryOut>(`/journal/${id}`, patch(body), token),
+  deleteJournal: (token: string, id: number) => request<void>(`/journal/${id}`, { method: "DELETE" }, token),
+
+  activity: (token: string, f: { actor?: string; action?: string; before_id?: number; limit?: number } = {}) =>
+    request<ActivityPage>(`/activity${qs(f)}`, {}, token),
+  signIns: (token: string) =>
+    request<{ items: SignInItem[]; failed_recent: number }>("/auth/sessions", {}, token),
+  logoutEverywhere: (token: string) => request<TokenOut>("/auth/logout-all", { method: "POST" }, token),
+  exportCsv: (token: string, kind: ExportKind, params: { portfolio_id?: number; list_id?: number } = {}) =>
+    downloadCsv(`/export/${kind}.csv${qs(params)}`, token, `aegis-${kind}.csv`),
+  paperPerformance: (token: string, id: number) =>
+    request<PaperPerformance>(`/paper/portfolios/${id}/performance`, {}, token),
   health: () => request<Health>("/health"),
   login: (email: string, password: string) =>
     request<{ access_token: string; expires_in_seconds: number }>("/auth/token", {

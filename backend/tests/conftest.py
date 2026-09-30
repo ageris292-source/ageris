@@ -63,6 +63,9 @@ def _clean_state() -> Iterator[None]:
     with get_engine().begin() as conn:
         # Test-only cleanup: immutability triggers are bypassed here and nowhere else.
         conn.execute(text("DELETE FROM watchlist_items"))
+        conn.execute(text("DELETE FROM watchlists"))
+        conn.execute(text("DELETE FROM price_alerts"))
+        conn.execute(text("DELETE FROM journal_entries"))
         conn.execute(text("DELETE FROM alerts"))
         conn.execute(text("ALTER TABLE ranking_runs DISABLE TRIGGER USER"))
         conn.execute(text("DELETE FROM ranking_runs"))

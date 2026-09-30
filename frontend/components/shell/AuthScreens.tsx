@@ -143,6 +143,13 @@ export function LoginScreen() {
           </form>
           <p className="mt-6 text-xs text-subtle">
             No account? Aegis is invite-only — ask your admin to invite you.
+            <span className="mt-2 block">
+              By signing in you accept the{" "}
+              <a href="/legal" className="-my-3 inline-block py-3 text-accent hover:underline">
+                terms and risk disclaimer
+              </a>
+              .
+            </span>
             {health === null && <span className="mt-2 block text-warn">The server isn&apos;t responding right now.</span>}
           </p>
         </div>

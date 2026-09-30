@@ -1,9 +1,11 @@
 "use client";
 
-import { CheckCircle2, Hand, Plus, RefreshCw, ScrollText, ShieldCheck, TriangleAlert, Wallet, XCircle } from "lucide-react";
+import { CheckCircle2, Hand, NotebookPen, Plus, RefreshCw, ScrollText, ShieldCheck, TriangleAlert, Wallet, XCircle } from "lucide-react";
 import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 import { EquityChart } from "@/components/charts";
+import { JournalEditor } from "@/components/Journal";
+import { PaperPerformanceView } from "@/components/PaperPerformance";
 import { usePageTitle } from "@/components/usePageTitle";
 import { useSession } from "@/components/providers/SessionProvider";
 import { useToast } from "@/components/providers/ToastProvider";
@@ -48,7 +50,7 @@ function newKey(): string {
   }
 }
 
-type TabKey = "positions" | "theses" | "fills" | "orders";
+type TabKey = "positions" | "performance" | "theses" | "fills" | "orders";
 
 function ThesisCard({ t, price }: { t: PaperPortfolioOut["theses"][number]; price: number | null }) {
   const stop = Number(t.stop_loss);
@@ -117,6 +119,7 @@ export default function PaperPage() {
   const [pending, setPending] = useState<ProposalRow[]>([]);
   const [tab, setTab] = useState<TabKey>("positions");
   const [confirm, setConfirm] = useState<ProposalRow | null>(null);
+  const [journalFor, setJournalFor] = useState<PaperPortfolioOut["executions"][number] | null>(null);
   const [placing, setPlacing] = useState(false);
   const [checking, setChecking] = useState(false);
   const [creating, setCreating] = useState(false);
@@ -322,6 +325,7 @@ export default function PaperPage() {
               onChange={setTab}
               tabs={[
                 { value: "positions", label: "Positions", badge: <Badge>{data.analysis.holdings.length}</Badge> },
+                { value: "performance", label: "Performance" },
                 { value: "theses", label: "Theses", badge: <Badge>{data.theses.filter((t) => t.status === "OPEN").length}</Badge> },
                 { value: "fills", label: "Fills", badge: <Badge>{data.executions.length}</Badge> },
                 { value: "orders", label: "Orders", badge: <Badge>{orders.length}</Badge> },
@@ -384,6 +388,8 @@ export default function PaperPage() {
               </Card>
             )}
 
+            {tab === "performance" && sel !== null && <PaperPerformanceView pid={sel} />}
+
             {tab === "theses" && (
               data.theses.length === 0 ? (
                 <Card><EmptyState compact icon={<ScrollText size={20} />} title="No theses yet" body="Each filled entry opens a thesis with its stop, target and horizon." /></Card>
@@ -412,6 +418,9 @@ export default function PaperPage() {
                               <span className="font-mono">{x.quantity}</span> <span className="font-mono font-semibold">{x.ticker}</span>
                             </p>
                             <p className="text-xs text-subtle">{istDateTime(x.executed_at)} · fees {inr(x.fees)}</p>
+                            <button type="button" onClick={() => setJournalFor(x)} className="-mb-2 mt-1 inline-flex items-center gap-1 py-2 text-xs font-medium text-accent">
+                              <NotebookPen size={12} aria-hidden /> Journal
+                            </button>
                           </div>
                           <div className="text-right">
                             <p className="font-mono text-[13px]">{inr(x.fill_price)}</p>
@@ -430,6 +439,7 @@ export default function PaperPage() {
                         <Th align="right" className="hidden md:table-cell">Reference</Th>
                         <Th align="right" className="hidden sm:table-cell">Fees</Th>
                         <Th align="right">Realised</Th>
+                        <Th />
                       </tr>
                     </thead>
                     <tbody>
@@ -444,6 +454,11 @@ export default function PaperPage() {
                           <Td align="right" mono className="hidden text-muted md:table-cell">{inr(x.reference_price)}</Td>
                           <Td align="right" mono className="hidden sm:table-cell">{inr(x.fees)}</Td>
                           <Td align="right" mono className={toneOf(x.realised_pnl)}>{x.realised_pnl === null ? "—" : signedInr(x.realised_pnl)}</Td>
+                          <Td align="right">
+                            <Button size="sm" variant="ghost" icon={<NotebookPen size={14} />} onClick={() => setJournalFor(x)}>
+                              Journal
+                            </Button>
+                          </Td>
                         </tr>
                       ))}
                     </tbody>
@@ -566,6 +581,14 @@ export default function PaperPage() {
           </Field>
         </form>
       </Dialog>
+      <JournalEditor
+        open={!!journalFor}
+        onClose={() => setJournalFor(null)}
+        orderId={journalFor?.order_id}
+        ticker={journalFor?.ticker}
+        defaultKind={journalFor?.side === "sell" ? "exit" : "entry"}
+        orderLabel={journalFor ? `Linked to order #${journalFor.order_id} · ${journalFor.side.toUpperCase()} ${journalFor.quantity}` : undefined}
+      />
     </div>
   );
 }

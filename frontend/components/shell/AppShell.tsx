@@ -11,6 +11,7 @@ import {
   Moon,
   OctagonPause,
   Search,
+  LifeBuoy,
   Settings2,
   ShieldCheck,
   Sun,
@@ -24,6 +25,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { useSession } from "@/components/providers/SessionProvider";
 import { useTheme, type ThemePref } from "@/components/providers/ThemeProvider";
 import { ForcedPasswordScreen, LoginScreen } from "@/components/shell/AuthScreens";
+import { WelcomeGuide } from "@/components/shell/WelcomeGuide";
 import { Brand, BrandMark } from "@/components/shell/Brand";
 import { CommandPalette } from "@/components/shell/CommandPalette";
 import { ACCOUNT_ITEM, NAV, isActive } from "@/components/shell/nav";
@@ -79,9 +81,10 @@ function SidebarNav({ onNavigate, unread }: { onNavigate?: () => void; unread: n
   const path = usePathname();
   const { isAdmin } = useSession();
   return (
-    <nav aria-label="Main" className="flex-1 space-y-6 overflow-y-auto px-3 py-4">
+    <nav aria-label="Main" className="flex-1 space-y-4 overflow-y-auto px-3 py-3">
       {NAV.map((g) => {
-        const items = g.items.filter((i) => !i.adminOnly || isAdmin);
+        // Help lives in the sidebar footer next to Account settings.
+        const items = g.items.filter((i) => (!i.adminOnly || isAdmin) && i.href !== "/help");
         if (!items.length) return null;
         return (
           <div key={g.group}>
@@ -96,7 +99,7 @@ function SidebarNav({ onNavigate, unread }: { onNavigate?: () => void; unread: n
                       onClick={onNavigate}
                       aria-current={active ? "page" : undefined}
                       className={cx(
-                        "flex items-center gap-2.5 rounded-lg px-2.5 py-2 text-sm font-medium transition-colors",
+                        "flex items-center gap-2.5 rounded-lg px-2.5 py-1.5 text-sm font-medium transition-colors",
                         active ? "bg-accent-soft text-accent" : "text-muted hover:bg-hover hover:text-ink",
                       )}
                     >
@@ -365,6 +368,26 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   }, [token, onKey]);
 
   if (!ready) return <div className="min-h-screen" />;
+  // Legal pages are readable before signing in.
+  if (!token && path.startsWith("/legal")) {
+    return (
+      <div className="min-h-screen">
+        <header className="pt-safe border-b border-line bg-panel">
+          <div className="mx-auto flex h-14 max-w-3xl items-center justify-between px-4">
+            <Link href="/" aria-label="Aegis sign in">
+              <Brand />
+            </Link>
+            <Link href="/" className="text-sm font-medium text-accent">
+              Sign in
+            </Link>
+          </div>
+        </header>
+        <main id="main" className="pb-safe mx-auto max-w-3xl px-4 py-8">
+          {children}
+        </main>
+      </div>
+    );
+  }
   if (!token) return <LoginScreen />;
   if (!me) {
     return (
@@ -385,15 +408,26 @@ export function AppShell({ children }: { children: React.ReactNode }) {
       <SidebarNav unread={unread} />
       <div className="space-y-2 border-t border-line p-3">
         <TradingStatus risk={risk} />
-        <Link
-          href={ACCOUNT_ITEM.href}
-          className={cx(
-            "flex items-center gap-2.5 rounded-lg px-2.5 py-2 text-sm font-medium",
-            isActive(path, ACCOUNT_ITEM.href) ? "bg-accent-soft text-accent" : "text-muted hover:bg-hover hover:text-ink",
-          )}
-        >
-          <Settings2 size={17} aria-hidden /> Account settings
-        </Link>
+        <div className="flex gap-1">
+          <Link
+            href={ACCOUNT_ITEM.href}
+            className={cx(
+              "flex flex-1 items-center gap-2.5 rounded-lg px-2.5 py-2 text-sm font-medium",
+              isActive(path, ACCOUNT_ITEM.href) ? "bg-accent-soft text-accent" : "text-muted hover:bg-hover hover:text-ink",
+            )}
+          >
+            <Settings2 size={17} aria-hidden /> Account
+          </Link>
+          <Link
+            href="/help"
+            className={cx(
+              "flex items-center gap-2 rounded-lg px-2.5 py-2 text-sm font-medium",
+              isActive(path, "/help") ? "bg-accent-soft text-accent" : "text-muted hover:bg-hover hover:text-ink",
+            )}
+          >
+            <LifeBuoy size={17} aria-hidden /> Help
+          </Link>
+        </div>
       </div>
     </>
   );
@@ -458,8 +492,15 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         {children}
       </main>
       <footer className="mx-auto max-w-[1400px] px-4 pb-[calc(5.5rem+env(safe-area-inset-bottom))] text-center text-xs text-subtle sm:px-6 lg:px-8 lg:pb-8">
-        Aegis is a research tool, not investment advice. Past results do not predict future results. Live trading is disabled.
+        <p>Aegis is a research tool, not investment advice. Past results do not predict future results. Live trading is disabled.</p>
+        <nav aria-label="Footer" className="mt-2 flex flex-wrap justify-center gap-x-2">
+          <Link href="/help" className="inline-block px-1.5 py-3 hover:text-ink">Help</Link>
+          <Link href="/legal#disclaimer" className="inline-block px-1.5 py-3 hover:text-ink">Risk disclaimer</Link>
+          <Link href="/legal#terms" className="inline-block px-1.5 py-3 hover:text-ink">Terms</Link>
+          <Link href="/legal#privacy" className="inline-block px-1.5 py-3 hover:text-ink">Privacy</Link>
+        </nav>
       </footer>
+      <WelcomeGuide />
 
       <MoreSheet open={more} onClose={() => setMore(false)} unread={unread} risk={risk} />
       <BottomNav onMore={() => setMore((v) => !v)} moreOpen={more} unread={unread} />

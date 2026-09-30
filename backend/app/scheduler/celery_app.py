@@ -81,8 +81,31 @@ celery_app.conf.update(
             "task": "aegis.refresh_eod_prices",
             "schedule": crontab(minute=45, hour=11, day_of_week="mon-fri"),
         },
+        # Personal price alerts, after each price refresh (Yahoo 11:45 UTC,
+        # licensed NSE 13:30 UTC). Each close is evaluated once per rule.
+        "price-alerts": {
+            "task": "aegis.check_price_alerts",
+            "schedule": crontab(minute="15", hour="12,14", day_of_week="mon-fri"),
+        },
     },
 )
+
+
+@celery_app.task(name="aegis.check_price_alerts")  # type: ignore[untyped-decorator]
+def check_price_alerts() -> dict[str, object]:
+    """Informational only: fires in-app alerts for users' own price rules."""
+    from app.alerts.price_rules import check_all
+    from app.db.session import _session_factory
+
+    now = datetime.now(UTC)
+    with _session_factory()() as db:
+        results = check_all(db, now)
+    return {
+        "job": "price_alerts",
+        "at": now.isoformat(),
+        "checked": len(results),
+        "fired": sum(1 for r in results if r.fired),
+    }
 
 
 @celery_app.task(name="aegis.heartbeat")  # type: ignore[untyped-decorator]

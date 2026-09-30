@@ -12,15 +12,19 @@ from starlette.middleware.trustedhost import TrustedHostMiddleware
 
 from app import __version__
 from app.api.routes import (
+    activity,
     analysis,
     auth,
     backtest,
+    exports,
     fundamentals,
+    journal,
     live,
     macro,
     monitoring,
     news,
     paper,
+    price_alerts,
     ranking,
     risk,
     stocks,
@@ -89,6 +93,8 @@ def create_app() -> FastAPI:
         allow_credentials=False,
         allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE"],
         allow_headers=["Authorization", "Content-Type", "Idempotency-Key"],
+        # CSV exports name their file; the browser may only read it if exposed.
+        expose_headers=["Content-Disposition"],
     )
     app.add_middleware(
         SecurityHeadersMiddleware,
@@ -112,6 +118,11 @@ def create_app() -> FastAPI:
     app.include_router(live.router)
     app.include_router(users.router)
     app.include_router(watchlist.router)
+    app.include_router(watchlist.lists_router)
+    app.include_router(price_alerts.router)
+    app.include_router(journal.router)
+    app.include_router(activity.router)
+    app.include_router(exports.router)
     return app
 
 

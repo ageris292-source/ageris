@@ -6,7 +6,7 @@ from typing import Any
 
 from fastapi import APIRouter, HTTPException, Query, status
 from pydantic import BaseModel
-from sqlalchemy import func, select, update
+from sqlalchemy import func, or_, select, update
 
 from app.alerts import service as alerts
 from app.api.deps import AdminUser, CurrentUser, DbSession
@@ -90,28 +90,36 @@ def _alert_out(a: Alert) -> dict[str, Any]:
         "link": a.link,
         "deliveries": a.deliveries,
         "read_at": a.read_at.isoformat() if a.read_at else None,
+        "personal": a.user_id is not None,
     }
+
+
+def _visible(user_id: object) -> Any:
+    """Team alerts (no owner) plus the caller's own personal alerts."""
+    return or_(Alert.user_id.is_(None), Alert.user_id == user_id)
 
 
 @router.get("/alerts", tags=["alerts"])
 def list_alerts(
     db: DbSession,
-    _u: CurrentUser,
+    user: CurrentUser,
     unread_only: bool = False,
     limit: int = Query(default=50, ge=1, le=500),
 ) -> dict[str, Any]:
-    q = select(Alert)
+    q = select(Alert).where(_visible(user.id))
     if unread_only:
         q = q.where(Alert.read_at.is_(None))
     rows = db.scalars(q.order_by(Alert.created_at.desc(), Alert.id.desc()).limit(limit))
-    unread = db.scalar(select(func.count()).select_from(Alert).where(Alert.read_at.is_(None)))
+    unread = db.scalar(
+        select(func.count()).select_from(Alert).where(Alert.read_at.is_(None), _visible(user.id))
+    )
     return {"unread": unread or 0, "alerts": [_alert_out(a) for a in rows]}
 
 
 @router.post("/alerts/{alert_id}/read", tags=["alerts"])
 def mark_read(alert_id: int, db: DbSession, user: CurrentUser, now: Now) -> dict[str, Any]:
     a = db.get(Alert, alert_id)
-    if a is None:
+    if a is None or (a.user_id is not None and a.user_id != user.id):
         raise HTTPException(status.HTTP_404_NOT_FOUND, f"alert {alert_id} not found")
     if a.read_at is None:
         a.read_at = now
@@ -125,7 +133,10 @@ def mark_read(alert_id: int, db: DbSession, user: CurrentUser, now: Now) -> dict
 @router.post("/alerts/read-all", tags=["alerts"])
 def mark_all_read(db: DbSession, user: CurrentUser, now: Now) -> dict[str, int]:
     ids = db.scalars(
-        update(Alert).where(Alert.read_at.is_(None)).values(read_at=now).returning(Alert.id)
+        update(Alert)
+        .where(Alert.read_at.is_(None), _visible(user.id))
+        .values(read_at=now)
+        .returning(Alert.id)
     ).all()
     n = len(ids)
     record_audit(db, action="alert.read_all", actor_user_id=user.id, details={"count": n})

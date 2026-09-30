@@ -169,7 +169,8 @@ from app.models.trading import (  # noqa: E402
     TradeProposalRecord,
 )
 
-# Web app: per-user watchlist.
+# Web app: named watchlists, price alerts, journal.
+from app.models.user_features import JournalEntry, PriceAlert, Watchlist  # noqa: E402
 from app.models.watchlist import WatchlistItem  # noqa: E402
 
 __all__ = [
@@ -185,6 +186,7 @@ __all__ = [
     "Document",
     "DocumentChunk",
     "FinancialFact",
+    "JournalEntry",
     "MacroObservation",
     "ModelMonitorRun",
     "ModelPrediction",
@@ -196,6 +198,7 @@ __all__ = [
     "PortfolioSnapshot",
     "Position",
     "Price",
+    "PriceAlert",
     "RankingRun",
     "RiskEvent",
     "RiskEventSeverity",
@@ -208,5 +211,6 @@ __all__ = [
     "TradingControl",
     "User",
     "UserRole",
+    "Watchlist",
     "WatchlistItem",
 ]

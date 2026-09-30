@@ -56,7 +56,10 @@ def login(
         )
 
     record_login(db, user)
-    record_audit(db, action="auth.login", actor_user_id=user.id, details={"client": client})
+    agent = (request.headers.get("user-agent") or "")[:200] or None
+    record_audit(
+        db, action="auth.login", actor_user_id=user.id, details={"client": client, "agent": agent}
+    )
     db.commit()
     return TokenResponse(
         access_token=create_access_token(user.id, user.role.value, user.token_version),

@@ -6,6 +6,7 @@ import {
   CheckCircle2,
   CircleHelp,
   Gauge,
+  ListPlus,
   Plus,
   Search,
   ShieldCheck,
@@ -18,7 +19,7 @@ import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { EquityChart } from "@/components/charts";
 import { usePageTitle } from "@/components/usePageTitle";
-import { useWatchlist, WatchStar } from "@/components/Watchlist";
+import { ManageListsDialog, useWatchlist, useWatchlists, WatchStar } from "@/components/Watchlist";
 import { useSession } from "@/components/providers/SessionProvider";
 import { useToast } from "@/components/providers/ToastProvider";
 import { Sparkline } from "@/components/ui/Sparkline";
@@ -31,6 +32,7 @@ import {
   EmptyState,
   Input,
   LinkButton,
+  Segmented,
   LoadingRows,
   MobileItem,
   MobileList,
@@ -58,8 +60,32 @@ function greeting() {
   return h < 12 ? "Good morning" : h < 17 ? "Good afternoon" : "Good evening";
 }
 
+const LIST_KEY = "aegis:dashboard-list";
+
 function WatchlistCard({ stocks }: { stocks: StockSummary[] | null }) {
-  const { rows, error, toggle, has } = useWatchlist();
+  const { lists } = useWatchlists();
+  const [listId, setListId] = useState<number | null>(null);
+  const [manage, setManage] = useState(false);
+  useEffect(() => {
+    try {
+      const v = Number(localStorage.getItem(LIST_KEY));
+      if (v) setListId(v);
+    } catch {
+      /* storage unavailable: default list */
+    }
+  }, []);
+  // A remembered list that was deleted falls back to the default.
+  const current = lists?.find((l) => l.id === listId) ?? lists?.[0] ?? null;
+  const effectiveId = lists ? (current?.id ?? null) : listId;
+  const pick = (id: number) => {
+    setListId(id);
+    try {
+      localStorage.setItem(LIST_KEY, String(id));
+    } catch {
+      /* not persisted */
+    }
+  };
+  const { rows, error, toggle, has } = useWatchlist(effectiveId);
   const toast = useToast();
   const [adding, setAdding] = useState("");
   const candidates = useMemo(() => (stocks ?? []).filter((s) => !has(s.ticker)), [stocks, has]);
@@ -72,7 +98,7 @@ function WatchlistCard({ stocks }: { stocks: StockSummary[] | null }) {
       toast({ tone: "warning", title: `${t} isn't in the universe yet`, body: "Pick a stock from the list, or ask an admin to add it on the Stocks page." });
       return;
     }
-    await toggle(t);
+    await toggle(t, current?.name);
     setAdding("");
   }
 
@@ -80,7 +106,7 @@ function WatchlistCard({ stocks }: { stocks: StockSummary[] | null }) {
     <Card
       title={
         <span className="flex items-center gap-2">
-          <Star size={15} className="text-[#c98500]" fill="currentColor" aria-hidden /> Your watchlist
+          <Star size={15} className="text-[#c98500]" fill="currentColor" aria-hidden /> {current?.name ?? "Your watchlist"}
         </span>
       }
       description="Last close, day change and 30-session trend. Stance comes from the latest research report."
@@ -108,6 +134,22 @@ function WatchlistCard({ stocks }: { stocks: StockSummary[] | null }) {
       }
       bodyClassName="pb-2"
     >
+      <div className="-mt-1 mb-3 flex items-center gap-2">
+        {lists && lists.length > 1 && (
+          <div className="min-w-0 flex-1">
+            <Segmented<string>
+              label="Choose a watchlist"
+              value={String(current?.id ?? "")}
+              onChange={(v) => pick(Number(v))}
+              options={lists.map((l) => ({ value: String(l.id), label: `${l.name} · ${l.count}` }))}
+            />
+          </div>
+        )}
+        <Button size="sm" variant="ghost" icon={<ListPlus size={14} />} onClick={() => setManage(true)} className={lists && lists.length > 1 ? "" : "-ml-2"}>
+          {lists && lists.length > 1 ? "Lists" : "New list"}
+        </Button>
+      </div>
+      <ManageListsDialog open={manage} onClose={() => setManage(false)} />
       {error && <p className="text-sm text-fail">{error}</p>}
       {rows === null && !error && <LoadingRows rows={4} />}
       {rows?.length === 0 && (
@@ -177,7 +219,7 @@ function WatchlistCard({ stocks }: { stocks: StockSummary[] | null }) {
                   <FreshnessBadge f={r.freshness} />
                 </Td>
                 <Td align="right">
-                  <WatchStar on ticker={r.ticker} onToggle={() => toggle(r.ticker)} />
+                  <WatchStar on ticker={r.ticker} onToggle={() => toggle(r.ticker, current?.name)} />
                 </Td>
               </tr>
             ))}

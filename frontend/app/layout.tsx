@@ -4,6 +4,7 @@ import { SessionProvider } from "@/components/providers/SessionProvider";
 import { ThemeProvider, themeBootScript } from "@/components/providers/ThemeProvider";
 import { ToastProvider } from "@/components/providers/ToastProvider";
 import { AppShell } from "@/components/shell/AppShell";
+import { ServiceWorker } from "@/components/shell/ServiceWorker";
 import "./globals.css";
 
 const inter = Inter({ subsets: ["latin"], variable: "--font-inter", display: "swap" });
@@ -45,6 +46,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           <SessionProvider>
             <ToastProvider>
               <AppShell>{children}</AppShell>
+              <ServiceWorker />
             </ToastProvider>
           </SessionProvider>
         </ThemeProvider>

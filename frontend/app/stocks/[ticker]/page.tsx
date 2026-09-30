@@ -12,6 +12,7 @@ import { ReportDetails, ReportHistory, ResearchSummary } from "@/components/Repo
 import { CsvImportCard, ModelEstimateCard } from "@/components/StockExtras";
 import { usePageTitle } from "@/components/usePageTitle";
 import { ValuationDetails } from "@/components/ValuationDetails";
+import { StockPersonal } from "@/components/StockPersonal";
 import { useWatchlist, WatchStar } from "@/components/Watchlist";
 import { useSession } from "@/components/providers/SessionProvider";
 import { useToast } from "@/components/providers/ToastProvider";
@@ -57,7 +58,7 @@ const RANGES = [
 ] as const;
 type RangeKey = (typeof RANGES)[number]["key"];
 
-type TabKey = "overview" | "technical" | "fundamentals" | "news" | "valuation" | "risk" | "data";
+type TabKey = "overview" | "technical" | "fundamentals" | "news" | "valuation" | "risk" | "data" | "mine";
 
 function isoMinusDays(iso: string, days: number) {
   const d = new Date(iso + "T00:00:00Z");
@@ -325,8 +326,11 @@ export default function StockPage() {
             { value: "valuation", label: "Valuation & macro" },
             { value: "risk", label: "Risk" },
             { value: "data", label: "Data" },
+            { value: "mine", label: "Notes & alerts" },
           ]}
         />
+
+        {tab === "mine" && <StockPersonal ticker={ticker} lastClose={detail?.latest_bar ? Number(detail.latest_bar.close) : null} />}
 
         {tab === "overview" && (
           <div className="space-y-6">

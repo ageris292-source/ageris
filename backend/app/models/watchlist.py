@@ -1,4 +1,4 @@
-"""Per-user watchlist: the stocks a person wants on their dashboard."""
+"""Watchlist items: the stocks in one of a person's named watchlists."""
 
 from __future__ import annotations
 
@@ -14,11 +14,14 @@ from app.db.session import Base
 
 class WatchlistItem(Base):
     __tablename__ = "watchlist_items"
-    __table_args__ = (UniqueConstraint("user_id", "stock_id", name="uq_watchlist_user_stock"),)
+    __table_args__ = (UniqueConstraint("watchlist_id", "stock_id", name="uq_watchlist_list_stock"),)
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     user_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), index=True
+    )
+    watchlist_id: Mapped[int] = mapped_column(
+        Integer, ForeignKey("watchlists.id", ondelete="CASCADE"), index=True
     )
     stock_id: Mapped[int] = mapped_column(Integer, ForeignKey("stocks.id", ondelete="CASCADE"))
     note: Mapped[str | None] = mapped_column(String(200), nullable=True)
