@@ -14,6 +14,7 @@ from app.market_data import service
 from app.market_data.adjustments import AdjustmentError
 from app.market_data.providers.base import DailyBarProvider, ProviderError, ProviderUnavailableError
 from app.market_data.providers.csv_import import parse_csv_bars
+from app.market_data.snapshot import price_snapshot
 from app.market_data.types import InvalidTickerError, PriceBasis, Ticker
 from app.models import DataConflict, DataIngestionRun, Stock
 from app.schemas.market import (
@@ -69,8 +70,9 @@ def _run_out(run: DataIngestionRun) -> IngestionRunOut:
     return IngestionRunOut.model_validate(run, from_attributes=True)
 
 
-def _summary(db: DbSession, stock: Stock, now: datetime) -> StockSummary:
+def _summary(db: DbSession, stock: Stock, now: datetime, prices: bool = True) -> StockSummary:
     f = service.freshness_for(db, stock, now)
+    snap = price_snapshot(db, stock, now) if prices else None
     last = db.scalar(
         select(DataIngestionRun.status)
         .where(DataIngestionRun.stock_id == stock.id)
@@ -86,6 +88,9 @@ def _summary(db: DbSession, stock: Stock, now: datetime) -> StockSummary:
         latest_session=f.latest_session,
         freshness=FreshnessOut(**f.__dict__),
         last_run_status=last,
+        last_close=snap.last_close if snap else None,
+        change_pct=snap.change_pct if snap else None,
+        sparkline=snap.sparkline if snap else [],
     )
 
 

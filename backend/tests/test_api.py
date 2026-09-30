@@ -61,7 +61,10 @@ def test_login_is_rate_limited(client: TestClient, analyst: User) -> None:
 
 def test_me(client: TestClient, admin: User) -> None:
     r = client.get("/auth/me", headers=auth_header(client, admin.email))
-    assert r.json() == {"email": "admin@aegis.test", "role": "admin"}
+    body = r.json()
+    assert (body["email"], body["role"], body["id"]) == ("admin@aegis.test", "admin", str(admin.id))
+    assert body["must_change_password"] is False and body["last_login_at"] is not None
+    assert "password_hash" not in body
 
 
 def test_risk_status_blocks_all_orders_in_default_build(client: TestClient, analyst: User) -> None:

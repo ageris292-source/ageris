@@ -45,6 +45,15 @@ class User(Base):
     )
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    # Set when an admin issues a temporary password; the user must replace it
+    # before doing anything else.
+    must_change_password: Mapped[bool] = mapped_column(
+        Boolean, default=False, server_default="false"
+    )
+    last_login_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    # Bumped on password change / reset / deactivation / role change: every
+    # token carries it, so older tokens stop working immediately.
+    token_version: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
 
 
 class AuditLog(Base):
@@ -160,6 +169,9 @@ from app.models.trading import (  # noqa: E402
     TradeProposalRecord,
 )
 
+# Web app: per-user watchlist.
+from app.models.watchlist import WatchlistItem  # noqa: E402
+
 __all__ = [
     "AgentOutputRecord",
     "AgentRun",
@@ -196,4 +208,5 @@ __all__ = [
     "TradingControl",
     "User",
     "UserRole",
+    "WatchlistItem",
 ]

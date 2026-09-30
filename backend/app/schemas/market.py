@@ -64,6 +64,9 @@ class StockSummary(BaseModel):
     latest_session: date | None
     freshness: FreshnessOut
     last_run_status: str | None
+    last_close: float | None = None
+    change_pct: float | None = None
+    sparkline: list[float] = []
 
 
 class BarOut(BaseModel):

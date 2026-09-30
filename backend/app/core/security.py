@@ -27,7 +27,7 @@ def verify_password(password: str, password_hash: str) -> bool:
         return False
 
 
-def create_access_token(user_id: uuid.UUID, role: str) -> str:
+def create_access_token(user_id: uuid.UUID, role: str, version: int = 0) -> str:
     s = get_settings()
     now = datetime.now(UTC)
     payload: dict[str, Any] = {
@@ -37,6 +37,9 @@ def create_access_token(user_id: uuid.UUID, role: str) -> str:
         "iat": now,
         "exp": now + timedelta(minutes=s.access_token_minutes),
         "jti": uuid.uuid4().hex,
+        # Token version: a password change, reset, role change or deactivation
+        # bumps the user's version and invalidates every older token.
+        "ver": version,
     }
     return jwt.encode(payload, s.jwt_secret.get_secret_value(), algorithm=s.jwt_algorithm)
 

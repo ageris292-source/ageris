@@ -18,6 +18,41 @@ class UserOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)
     email: str
     role: str
+    id: str | None = None
+    must_change_password: bool = False
+    created_at: datetime | None = None
+    last_login_at: datetime | None = None
+
+
+class ChangePasswordRequest(BaseModel):
+    current_password: str = Field(min_length=1, max_length=200)
+    new_password: str = Field(min_length=1, max_length=200)
+
+
+class UserAdminOut(BaseModel):
+    id: str
+    email: str
+    role: Literal["admin", "analyst"]
+    is_active: bool
+    must_change_password: bool
+    created_at: datetime
+    last_login_at: datetime | None
+
+
+class InviteUserRequest(BaseModel):
+    email: str = Field(min_length=3, max_length=320, pattern=r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
+    role: Literal["admin", "analyst"] = "analyst"
+
+
+class InviteUserResponse(BaseModel):
+    user: UserAdminOut
+    temporary_password: str
+    notice: str
+
+
+class UpdateUserRequest(BaseModel):
+    role: Literal["admin", "analyst"] | None = None
+    is_active: bool | None = None
 
 
 class ComponentHealth(BaseModel):

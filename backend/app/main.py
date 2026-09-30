@@ -27,6 +27,8 @@ from app.api.routes import (
     system,
     technical,
     trade,
+    users,
+    watchlist,
 )
 from app.core.config_file import get_config
 from app.core.http_security import (
@@ -85,7 +87,7 @@ def create_app() -> FastAPI:
         CORSMiddleware,
         allow_origins=settings.cors_origins,
         allow_credentials=False,
-        allow_methods=["GET", "POST", "PUT"],
+        allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE"],
         allow_headers=["Authorization", "Content-Type", "Idempotency-Key"],
     )
     app.add_middleware(
@@ -108,6 +110,8 @@ def create_app() -> FastAPI:
     app.include_router(ranking.router)
     app.include_router(monitoring.router)
     app.include_router(live.router)
+    app.include_router(users.router)
+    app.include_router(watchlist.router)
     return app
 
 

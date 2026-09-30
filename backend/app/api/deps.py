@@ -25,15 +25,30 @@ _UNAUTHORIZED = HTTPException(
 )
 
 
-def get_current_user(db: DbSession, token: Annotated[str, Depends(oauth2_scheme)]) -> User:
+def get_authenticated_user(db: DbSession, token: Annotated[str, Depends(oauth2_scheme)]) -> User:
+    """Any valid session, including one that still has to replace a temporary password."""
     try:
         claims = decode_access_token(token)
         user_id = uuid.UUID(claims["sub"])
-    except (jwt.PyJWTError, KeyError, ValueError):
+        version = int(claims.get("ver", 0))
+    except (jwt.PyJWTError, KeyError, ValueError, TypeError):
         raise _UNAUTHORIZED from None
     user = db.get(User, user_id)
-    if user is None or not user.is_active:
+    if user is None or not user.is_active or version != user.token_version:
         raise _UNAUTHORIZED
+    return user
+
+
+AuthenticatedUser = Annotated[User, Depends(get_authenticated_user)]
+
+
+def get_current_user(user: AuthenticatedUser) -> User:
+    """A fully set-up user. A temporary password must be replaced first."""
+    if user.must_change_password:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="password change required: set a new password to continue",
+        )
     return user
 
 
