@@ -13,11 +13,14 @@ import {
   Button,
   Callout,
   Card,
+  DesktopOnly,
   EmptyState,
   Field,
   Input,
   LinkButton,
   LoadingRows,
+  MobileItem,
+  MobileList,
   PageHeader,
   Select,
   StatCard,
@@ -330,7 +333,24 @@ export default function PaperPage() {
                 {data.analysis.holdings.length === 0 ? (
                   <EmptyState compact icon={<Wallet size={20} />} title="No open positions" />
                 ) : (
-                  <Table>
+                  <>
+                  <MobileList className="mb-2">
+                    {data.analysis.holdings.map((x) => (
+                      <MobileItem key={x.ticker} href={`/stocks/${encodeURIComponent(x.ticker)}`}>
+                        <div className="flex items-center justify-between gap-3">
+                          <div className="min-w-0">
+                            <p className="font-mono text-[13px] font-semibold">{x.ticker}</p>
+                            <p className="text-xs text-muted">{x.quantity} × {inr(x.avg_cost)} · {pct(x.weight)} of equity</p>
+                          </div>
+                          <div className="text-right">
+                            <p className="font-mono text-[13px]">{x.price === null ? "unknown" : inr(x.price)}</p>
+                            <p className={cx("font-mono text-xs", toneOf(x.unrealised_pnl))}>{signedInr(x.unrealised_pnl)}</p>
+                          </div>
+                        </div>
+                      </MobileItem>
+                    ))}
+                  </MobileList>
+                  <DesktopOnly><Table>
                     <thead>
                       <tr>
                         <Th>Stock</Th>
@@ -358,7 +378,8 @@ export default function PaperPage() {
                         </tr>
                       ))}
                     </tbody>
-                  </Table>
+                  </Table></DesktopOnly>
+                  </>
                 )}
               </Card>
             )}
@@ -380,7 +401,27 @@ export default function PaperPage() {
                 {data.executions.length === 0 ? (
                   <EmptyState compact title="No fills yet" />
                 ) : (
-                  <Table>
+                  <>
+                  <MobileList className="mb-2">
+                    {data.executions.map((x) => (
+                      <MobileItem key={x.id}>
+                        <div className="flex items-start justify-between gap-3">
+                          <div className="min-w-0">
+                            <p className="text-sm">
+                              <span className={cx("font-medium capitalize", x.side === "buy" ? "text-pass" : "text-fail")}>{x.side}</span>{" "}
+                              <span className="font-mono">{x.quantity}</span> <span className="font-mono font-semibold">{x.ticker}</span>
+                            </p>
+                            <p className="text-xs text-subtle">{istDateTime(x.executed_at)} · fees {inr(x.fees)}</p>
+                          </div>
+                          <div className="text-right">
+                            <p className="font-mono text-[13px]">{inr(x.fill_price)}</p>
+                            {x.realised_pnl !== null && <p className={cx("font-mono text-xs", toneOf(x.realised_pnl))}>{signedInr(x.realised_pnl)}</p>}
+                          </div>
+                        </div>
+                      </MobileItem>
+                    ))}
+                  </MobileList>
+                  <DesktopOnly><Table>
                     <thead>
                       <tr>
                         <Th>When</Th>
@@ -406,7 +447,8 @@ export default function PaperPage() {
                         </tr>
                       ))}
                     </tbody>
-                  </Table>
+                  </Table></DesktopOnly>
+                  </>
                 )}
               </Card>
             )}
@@ -416,7 +458,26 @@ export default function PaperPage() {
                 {orders.length === 0 ? (
                   <EmptyState compact title="No orders yet" />
                 ) : (
-                  <Table>
+                  <>
+                  <MobileList className="mb-2">
+                    {orders.map((o) => (
+                      <MobileItem key={o.id}>
+                        <div className="flex items-start justify-between gap-3">
+                          <p className="text-sm">
+                            <span className="capitalize">{o.side}</span> <span className="font-mono">{o.quantity}</span>{" "}
+                            <span className="font-mono font-semibold">{o.ticker}</span> <span className="text-muted">≤ {inr(o.limit_price)}</span>
+                          </p>
+                          {o.status === "FILLED" ? (
+                            <Badge tone="pass" icon={<CheckCircle2 size={12} aria-hidden />}>Filled</Badge>
+                          ) : (
+                            <Badge tone="fail" icon={<XCircle size={12} aria-hidden />}>Rejected</Badge>
+                          )}
+                        </div>
+                        <p className="mt-1 text-xs text-muted">#{o.id} · {o.reason}</p>
+                      </MobileItem>
+                    ))}
+                  </MobileList>
+                  <DesktopOnly><Table>
                     <thead>
                       <tr>
                         <Th>#</Th>
@@ -447,7 +508,8 @@ export default function PaperPage() {
                         </tr>
                       ))}
                     </tbody>
-                  </Table>
+                  </Table></DesktopOnly>
+                  </>
                 )}
               </Card>
             )}

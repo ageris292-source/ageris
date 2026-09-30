@@ -27,10 +27,13 @@ import {
   Badge,
   Button,
   Card,
+  DesktopOnly,
   EmptyState,
   Input,
   LinkButton,
   LoadingRows,
+  MobileItem,
+  MobileList,
   Skeleton,
   StatCard,
   Table,
@@ -82,14 +85,14 @@ function WatchlistCard({ stocks }: { stocks: StockSummary[] | null }) {
       }
       description="Last close, day change and 30-session trend. Stance comes from the latest research report."
       actions={
-        <form onSubmit={add} className="flex gap-2">
+        <form onSubmit={add} className="flex w-full gap-2 sm:w-auto">
           <Input
             list="watch-candidates"
             value={adding}
             onChange={(e) => setAdding(e.target.value)}
             placeholder="Add ticker…"
             aria-label="Add a stock to your watchlist"
-            className="h-8 w-36 font-mono text-xs uppercase"
+            className="h-10 flex-1 font-mono uppercase sm:h-8 sm:w-36 sm:flex-none sm:text-xs"
           />
           <datalist id="watch-candidates">
             {candidates.map((s) => (
@@ -117,6 +120,26 @@ function WatchlistCard({ stocks }: { stocks: StockSummary[] | null }) {
         />
       )}
       {rows && rows.length > 0 && (
+        <MobileList className="mb-2">
+          {rows.map((r) => (
+            <MobileItem key={r.ticker} href={`/stocks/${encodeURIComponent(r.ticker)}`}>
+              <div className="flex items-center gap-3">
+                <div className="min-w-0 flex-1">
+                  <p className="font-mono text-[13px] font-semibold">{r.ticker}</p>
+                  <p className="truncate text-xs text-muted">{r.name ?? r.exchange}</p>
+                </div>
+                <Sparkline values={r.sparkline} width={64} height={26} />
+                <div className="w-[92px] text-right">
+                  <p className="font-mono text-[13px]">{inr(r.last_close)}</p>
+                  <p className={cx("font-mono text-xs", toneOf(r.change_pct))}>{signedPct(r.change_pct)}</p>
+                </div>
+              </div>
+            </MobileItem>
+          ))}
+        </MobileList>
+      )}
+      {rows && rows.length > 0 && (
+        <DesktopOnly>
         <Table>
           <thead>
             <tr>
@@ -160,6 +183,7 @@ function WatchlistCard({ stocks }: { stocks: StockSummary[] | null }) {
             ))}
           </tbody>
         </Table>
+        </DesktopOnly>
       )}
     </Card>
   );
@@ -268,8 +292,8 @@ export default function Dashboard() {
             {greeting()}, <span className="capitalize">{name}</span>
           </h1>
         </div>
-        <div className="flex flex-wrap gap-2">
-          <LinkButton href="/stocks" icon={<Search size={15} />}>Research a stock</LinkButton>
+        <div className="grid w-full grid-cols-2 gap-2 sm:flex sm:w-auto">
+          <LinkButton href="/stocks" icon={<Search size={15} />}>Research<span className="hidden sm:inline">&nbsp;a stock</span></LinkButton>
           <LinkButton href="/trade" variant="primary" icon={<ShieldCheck size={15} />}>New trade</LinkButton>
         </div>
       </div>

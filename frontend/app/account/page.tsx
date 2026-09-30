@@ -41,6 +41,7 @@ export default function AccountPage() {
             ]}
           />
           <Button className="mt-6 w-full" variant="secondary" icon={<LogOut size={15} />} onClick={signOut}>Sign out</Button>
+          <p className="mt-4 text-center text-xs text-subtle sm:hidden">Tip: add Aegis to your home screen from your browser&apos;s Share or ⋮ menu for a full-screen app.</p>
         </Card>
 
         <Card className="xl:col-span-2" title={<span className="flex items-center gap-2"><KeyRound size={15} aria-hidden /> Change password</span>} description="Use at least 12 characters.">
@@ -73,7 +74,7 @@ export default function AccountPage() {
         </div>
       </Card>
 
-      <Card title="Keyboard shortcuts">
+      <Card title="Keyboard shortcuts" className="hidden sm:block">
         <ul className="grid gap-3 text-sm sm:grid-cols-2">
           {[
             ["⌘ K  or  Ctrl K", "Search stocks and pages"],

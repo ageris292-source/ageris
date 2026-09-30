@@ -23,10 +23,13 @@ import {
   Badge,
   Button,
   Card,
+  DesktopOnly,
   Field,
   Input,
   KeyValues,
   LoadingRows,
+  MobileItem,
+  MobileList,
   PageHeader,
   Table,
   Td,
@@ -89,8 +92,8 @@ function KillSwitch({ risk, onChange }: { risk: RiskStatus; onChange: () => void
         </div>
       </div>
       <div className="mt-4 flex flex-wrap gap-2">
-        {!active && <Button variant="danger" icon={<OctagonPause size={15} />} onClick={() => setOpen("halt")}>Halt trading</Button>}
-        {active && isAdmin && <Button variant="primary" icon={<Play size={15} />} onClick={() => setOpen("resume")}>Resume trading</Button>}
+        {!active && <Button variant="danger" icon={<OctagonPause size={15} />} onClick={() => setOpen("halt")} className="w-full sm:w-auto">Halt trading</Button>}
+        {active && isAdmin && <Button variant="primary" icon={<Play size={15} />} onClick={() => setOpen("resume")} className="w-full sm:w-auto">Resume trading</Button>}
         {active && !isAdmin && <p className="text-xs text-muted">Only an admin can resume after reviewing.</p>}
       </div>
       <p className="mt-3 text-xs text-subtle">Resuming only clears the halt. It never enables live trading.</p>
@@ -206,6 +209,18 @@ export default function SystemPage() {
                 <Flag ok={risk.paper_orders_permitted} yes="Paper orders permitted" no="Paper orders blocked" />
                 <Flag ok={risk.live_orders_permitted} yes="Live orders permitted" no="Live orders blocked" />
               </div>
+              <MobileList className="mb-2">
+                {risk.checks.map((c) => (
+                  <MobileItem key={c.name}>
+                    <div className="flex items-center justify-between gap-3">
+                      <span className="text-sm font-medium capitalize">{humanize(c.name)}</span>
+                      <GateBadge s={c.status} />
+                    </div>
+                    <p className="mt-1 break-words text-xs text-muted">{c.reason}</p>
+                  </MobileItem>
+                ))}
+              </MobileList>
+              <DesktopOnly>
               <Table>
                 <thead>
                   <tr>
@@ -224,6 +239,7 @@ export default function SystemPage() {
                   ))}
                 </tbody>
               </Table>
+              </DesktopOnly>
               <p className="py-3 font-mono text-[11px] text-subtle">config {risk.config_version} · {risk.config_fingerprint.slice(0, 16)}</p>
             </>
           )}
@@ -321,7 +337,7 @@ export default function SystemPage() {
         actions={
           isAdmin && (
             <>
-              <Button size="sm" icon={<Plus size={14} />} onClick={() => setManualOpen(true)}>Record official figure</Button>
+              <Button size="sm" icon={<Plus size={14} />} onClick={() => setManualOpen(true)}>Record figure</Button>
               <Button size="sm" loading={busy} icon={<RefreshCw size={14} />} onClick={refreshMacro}>Refresh now</Button>
             </>
           )
@@ -331,6 +347,20 @@ export default function SystemPage() {
         {!macro ? (
           <LoadingRows rows={4} />
         ) : (
+          <>
+          <MobileList className="mb-2">
+            {macro.map((m) => (
+              <MobileItem key={m.series}>
+                <div className="flex items-center justify-between gap-3">
+                  <span className="font-mono text-[13px]">{m.series}</span>
+                  <span className="font-mono text-[13px]">{m.latest_value === null ? "—" : m.latest_value.toLocaleString("en-IN", { maximumFractionDigits: 4 })}</span>
+                </div>
+                <p className="mt-0.5 text-xs text-muted">{m.latest_date ?? "—"} · {m.observations} obs · {m.licensed ? "official" : "research only"}</p>
+              </MobileItem>
+            ))}
+            {macro.length === 0 && <MobileItem><span className="text-sm text-muted">No macro data yet.</span></MobileItem>}
+          </MobileList>
+          <DesktopOnly>
           <Table>
             <thead>
               <tr>
@@ -360,6 +390,8 @@ export default function SystemPage() {
               )}
             </tbody>
           </Table>
+          </DesktopOnly>
+          </>
         )}
       </Card>
 

@@ -43,6 +43,12 @@ export function compact(v: Num): string {
   return n === null ? "—" : compactFmt.format(n);
 }
 
+/** Axis labels: whole rupees with Indian grouping, no symbol ("3,600"). */
+export function axisNum(v: Num): string {
+  const n = toNum(v);
+  return n === null ? "—" : Math.round(n).toLocaleString("en-IN");
+}
+
 /** Fraction → percent: 0.1234 → "12.3%". */
 export function pct(v: Num, digits = 1): string {
   const n = toNum(v);

@@ -23,10 +23,13 @@ import {
   Button,
   Callout,
   Card,
+  DesktopOnly,
   EmptyState,
   Field,
   Input,
   LinkButton,
+  MobileItem,
+  MobileList,
   PageHeader,
   Segmented,
   Select,
@@ -83,7 +86,7 @@ function Decision({ d }: { d: TradeDecision }) {
           </div>
         </div>
         {ok ? (
-          <LinkButton href="/paper" variant="primary" icon={<Hand size={15} />}>
+          <LinkButton href="/paper" variant="primary" icon={<Hand size={15} />} className="w-full sm:w-auto">
             Review on Paper trading <ArrowRight size={14} />
           </LinkButton>
         ) : (
@@ -371,8 +374,8 @@ export default function TradePage() {
                 </div>
               </div>
 
-              <div className="grid gap-4 sm:grid-cols-3">
-                <Field label="Ticker">
+              <div className="grid grid-cols-2 gap-x-3 gap-y-4 sm:grid-cols-3 sm:gap-x-4">
+                <Field label="Ticker" className="col-span-2 sm:col-span-1">
                   {(id) => (
                     <>
                       <Input id={id} list="trade-stocks" placeholder="TCS.NS" value={f.ticker} onChange={set("ticker")} className="font-mono uppercase" autoComplete="off" required />
@@ -385,18 +388,18 @@ export default function TradePage() {
                   )}
                 </Field>
                 <Field label="Quantity (shares)">
-                  {(id) => <Input id={id} inputMode="numeric" value={f.quantity} onChange={set("quantity")} className="font-mono" required />}
+                  {(id) => <Input id={id} inputMode="numeric" enterKeyHint="next" value={f.quantity} onChange={set("quantity")} className="font-mono" required />}
                 </Field>
                 <Field label="Limit price (₹)">
                   {(id) => <Input id={id} inputMode="decimal" value={f.entry_price} onChange={set("entry_price")} className="font-mono" required />}
                 </Field>
-                <Field label="Stop-loss (₹)" error={preview?.badStop ? "For a buy, the stop must be below the entry." : undefined}>
+                <Field label="Stop-loss (₹)" error={preview?.badStop ? "Must be below the entry for a buy." : undefined}>
                   {(id) => <Input id={id} inputMode="decimal" value={f.stop_loss} onChange={set("stop_loss")} className="font-mono" />}
                 </Field>
-                <Field label="Target (₹)" error={preview?.badTarget ? "For a buy, the target must be above the entry." : undefined}>
+                <Field label="Target (₹)" error={preview?.badTarget ? "Must be above the entry for a buy." : undefined}>
                   {(id) => <Input id={id} inputMode="decimal" value={f.target} onChange={set("target")} className="font-mono" />}
                 </Field>
-                <Field label="Holding period (trading days)">
+                <Field label="Holding (trading days)" className="col-span-2 sm:col-span-1">
                   {(id) => <Input id={id} inputMode="numeric" value={f.horizon_days} onChange={set("horizon_days")} className="font-mono" />}
                 </Field>
               </div>
@@ -453,11 +456,11 @@ export default function TradePage() {
                 </div>
               )}
 
-              <div className="flex flex-wrap justify-end gap-2 border-t border-line pt-5">
-                <Button type="button" onClick={estimate} loading={costBusy} disabled={!canSubmit} icon={<Calculator size={15} />}>
+              <div className="flex flex-col-reverse gap-2 border-t border-line pt-5 sm:flex-row sm:flex-wrap sm:justify-end">
+                <Button type="button" onClick={estimate} loading={costBusy} disabled={!canSubmit} icon={<Calculator size={15} />} className="w-full sm:w-auto">
                   Estimate costs
                 </Button>
-                <Button type="submit" variant="primary" loading={busy} disabled={!canSubmit} icon={<ShieldCheck size={15} />}>
+                <Button type="submit" variant="primary" loading={busy} disabled={!canSubmit} icon={<ShieldCheck size={15} />} className="w-full sm:w-auto">
                   {busy ? "Evaluating…" : "Evaluate with risk engine"}
                 </Button>
               </div>
@@ -497,6 +500,29 @@ export default function TradePage() {
           {rows.length === 0 ? (
             <EmptyState compact icon={<FileSearch size={20} />} title="No proposals yet" />
           ) : (
+            <>
+            <MobileList className="mb-2">
+              {rows.map((r) => (
+                <MobileItem key={r.proposal_id} onClick={() => open(r.decision_id)}>
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="min-w-0">
+                      <p className="text-sm">
+                        <span className="capitalize">{r.side}</span> <span className="font-mono">{r.quantity}</span>{" "}
+                        <span className="font-mono font-semibold">{r.ticker}</span> <span className="text-muted">@ {inr(r.entry_price)}</span>
+                      </p>
+                      <p className="mt-0.5 text-xs text-subtle">#{r.proposal_id} · {istDateTime(r.created_at)}</p>
+                    </div>
+                    {r.decision === "APPROVED" ? (
+                      <Badge tone="pass" icon={<CheckCircle2 size={12} aria-hidden />}>Approved</Badge>
+                    ) : (
+                      <Badge tone="fail" icon={<XCircle size={12} aria-hidden />}>Rejected</Badge>
+                    )}
+                  </div>
+                  {r.first_failure && <p className="mt-1 font-mono text-[11px] text-muted">first fail: {r.first_failure}</p>}
+                </MobileItem>
+              ))}
+            </MobileList>
+            <DesktopOnly>
             <Table>
               <thead>
                 <tr>
@@ -532,6 +558,8 @@ export default function TradePage() {
                 ))}
               </tbody>
             </Table>
+            </DesktopOnly>
+            </>
           )}
         </Card>
 
@@ -551,7 +579,7 @@ export default function TradePage() {
             </ol>
           )}
           <p className="mt-4 text-xs text-muted">
-            See <Link href="/system" className="text-accent hover:underline">System</Link> for live readiness and the kill switch.
+            See <Link href="/system" className="-my-3 inline-block py-3 text-accent hover:underline">System</Link> for live readiness and the kill switch.
           </p>
         </Card>
       </div>

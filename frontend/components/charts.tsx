@@ -10,8 +10,22 @@ import {
   YAxis,
   type TooltipProps,
 } from "recharts";
+import { useEffect, useState } from "react";
 import { useChartColors } from "@/components/providers/ThemeProvider";
 import { inr, inrCompact, shortDate } from "@/lib/format";
+
+/** True on phone-width screens; charts use smaller axes and heights there. */
+export function useNarrow(query = "(max-width: 639px)") {
+  const [narrow, setNarrow] = useState(false);
+  useEffect(() => {
+    const mq = window.matchMedia(query);
+    const on = () => setNarrow(mq.matches);
+    on();
+    mq.addEventListener("change", on);
+    return () => mq.removeEventListener("change", on);
+  }, [query]);
+  return narrow;
+}
 
 export function ChartTooltipBox({ title, rows }: { title: string; rows: [string, string, string?][] }) {
   return (
@@ -41,6 +55,7 @@ export function EquityChart({
   height?: number;
 }) {
   const c = useChartColors();
+  const narrow = useNarrow();
   if (data.length < 2) return null;
   const Tip = ({ active, payload }: TooltipProps<number, string>) => {
     if (!active || !payload?.length) return null;
@@ -48,7 +63,7 @@ export function EquityChart({
     return <ChartTooltipBox title={shortDate(p.t)} rows={[["Equity", inr(p.equity)]]} />;
   };
   return (
-    <div style={{ height }}>
+    <div style={{ height: narrow ? Math.round(height * 0.8) : height }}>
       <ResponsiveContainer width="100%" height="100%">
         <AreaChart data={data} margin={{ top: 8, right: 4, bottom: 0, left: 0 }}>
           <defs>
@@ -61,7 +76,7 @@ export function EquityChart({
           <XAxis dataKey="t" tickFormatter={shortDate} tick={{ fill: c.axis, fontSize: 11 }} tickLine={false} axisLine={{ stroke: c.grid }} minTickGap={40} />
           <YAxis
             orientation="right"
-            width={72}
+            width={narrow ? 58 : 72}
             domain={["auto", "auto"]}
             tickFormatter={(v: number) => inrCompact(v)}
             tick={{ fill: c.axis, fontSize: 11 }}

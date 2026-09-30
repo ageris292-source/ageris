@@ -15,10 +15,10 @@ import {
   YAxis,
   type TooltipProps,
 } from "recharts";
-import { ChartTooltipBox } from "@/components/charts";
+import { ChartTooltipBox, useNarrow } from "@/components/charts";
 import { useChartColors } from "@/components/providers/ThemeProvider";
 import type { BarOut, IndicatorSeries } from "@/lib/api";
-import { compact, inr, num, shortDate } from "@/lib/format";
+import { axisNum, compact, inr, num, shortDate } from "@/lib/format";
 
 interface Point {
   session: string;
@@ -48,6 +48,8 @@ function LegendItem({ color, label, dashed }: { color: string; label: string; da
  *  so identity never relies on colour alone), volume and RSI panes sharing a crosshair. */
 export function PriceChart({ bars, indicators }: { bars: BarOut[]; indicators?: IndicatorSeries | null }) {
   const c = useChartColors();
+  const narrow = useNarrow();
+  const yw = narrow ? 52 : 72;
   const bySession = new Map(indicators?.points.map((p) => [p.session, p]) ?? []);
   const data: Point[] = bars.map((b) => {
     const ip = bySession.get(b.session);
@@ -98,7 +100,7 @@ export function PriceChart({ bars, indicators }: { bars: BarOut[]; indicators?: 
         {overlays && <LegendItem color={c.s2} label={`SMA ${mid}`} dashed />}
         {overlays && <LegendItem color={c.s3} label={`SMA ${long}`} dashed />}
       </div>
-      <div className="h-72 sm:h-80">
+      <div className="h-56 sm:h-80">
         <ResponsiveContainer width="100%" height="100%">
           <ComposedChart data={data} syncId="px" margin={{ ...margin, top: 8 }}>
             <defs>
@@ -109,7 +111,7 @@ export function PriceChart({ bars, indicators }: { bars: BarOut[]; indicators?: 
             </defs>
             <CartesianGrid stroke={c.grid} vertical={false} />
             <XAxis dataKey="session" {...axis} tickFormatter={shortDate} minTickGap={56} hide />
-            <YAxis {...axis} axisLine={false} orientation="right" domain={["auto", "auto"]} width={72} tickFormatter={(v: number) => inr(v, 0)} />
+            <YAxis {...axis} axisLine={false} orientation="right" domain={["auto", "auto"]} width={yw} tickFormatter={(v: number) => (narrow ? axisNum(v) : inr(v, 0))} />
             <Tooltip content={<Tip />} cursor={{ stroke: c.axis, strokeWidth: 1 }} isAnimationActive={false} />
             <Area type="linear" dataKey="close" stroke="none" fill="url(#px-fill)" isAnimationActive={false} activeDot={false} />
             {overlays && (
@@ -122,22 +124,22 @@ export function PriceChart({ bars, indicators }: { bars: BarOut[]; indicators?: 
           </ComposedChart>
         </ResponsiveContainer>
       </div>
-      <div className="mt-1 h-16">
+      <div className="mt-1 h-12 sm:h-16">
         <ResponsiveContainer width="100%" height="100%">
           <BarChart data={data} syncId="px" margin={margin} barCategoryGap={1}>
             <XAxis dataKey="session" {...axis} tickFormatter={shortDate} minTickGap={56} hide={overlays} />
-            <YAxis {...axis} axisLine={false} orientation="right" width={72} tickFormatter={(v: number) => compact(v)} tickCount={2} />
+            <YAxis {...axis} axisLine={false} orientation="right" width={yw} tickFormatter={(v: number) => compact(v)} tickCount={2} />
             <Tooltip content={() => null} cursor={{ fill: c.grid }} />
             <Bar dataKey="volume" fill={c.axis} fillOpacity={0.5} radius={[2, 2, 0, 0]} isAnimationActive={false} />
           </BarChart>
         </ResponsiveContainer>
       </div>
       {overlays && indicators && (
-        <div className="mt-1 h-24">
+        <div className="mt-1 h-20 sm:h-24">
           <ResponsiveContainer width="100%" height="100%">
             <LineChart data={data} syncId="px" margin={margin}>
-              <XAxis dataKey="session" {...axis} tickFormatter={shortDate} minTickGap={56} />
-              <YAxis {...axis} axisLine={false} orientation="right" width={72} domain={[0, 100]} ticks={[indicators.rsi_oversold, indicators.rsi_overbought]} />
+              <XAxis dataKey="session" {...axis} tickFormatter={shortDate} minTickGap={narrow ? 40 : 56} />
+              <YAxis {...axis} axisLine={false} orientation="right" width={yw} domain={[0, 100]} ticks={[indicators.rsi_oversold, indicators.rsi_overbought]} />
               <ReferenceLine y={indicators.rsi_overbought} stroke={c.axis} strokeDasharray="3 3" />
               <ReferenceLine y={indicators.rsi_oversold} stroke={c.axis} strokeDasharray="3 3" />
               <Tooltip content={() => null} cursor={{ stroke: c.axis, strokeWidth: 1 }} />

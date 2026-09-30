@@ -19,9 +19,9 @@ const VARIANT: Record<Variant, string> = {
   success: "bg-pass text-white hover:opacity-90 shadow-sm",
 };
 const SIZE: Record<Size, string> = {
-  sm: "h-8 px-2.5 text-xs gap-1.5",
-  md: "h-9 px-3.5 text-sm gap-2",
-  lg: "h-11 px-5 text-sm gap-2",
+  sm: "h-9 px-3 text-xs gap-1.5 sm:h-8 sm:px-2.5",
+  md: "h-11 px-4 text-sm gap-2 sm:h-9 sm:px-3.5",
+  lg: "h-12 px-5 text-[15px] gap-2 sm:h-11 sm:text-sm",
 };
 
 export interface ButtonProps extends React.ButtonHTMLAttributes<HTMLButtonElement> {
@@ -96,7 +96,7 @@ export function IconButton({
       aria-label={label}
       title={label}
       className={cx(
-        "inline-flex h-9 w-9 items-center justify-center rounded-md text-muted transition-colors hover:bg-hover hover:text-ink disabled:opacity-40",
+        "inline-flex h-11 w-11 items-center justify-center rounded-md text-muted transition-colors hover:bg-hover hover:text-ink active:bg-hover disabled:opacity-40 sm:h-9 sm:w-9",
         className,
       )}
       {...rest}
@@ -128,7 +128,7 @@ export function Card({
   return (
     <section id={id} className={cx("min-w-0 rounded-xl border border-line bg-panel shadow-[var(--shadow-card)]", className)}>
       {(title || actions) && (
-        <header className="flex flex-wrap items-start justify-between gap-x-4 gap-y-3 px-5 pt-4">
+        <header className="flex flex-wrap items-start justify-between gap-x-4 gap-y-3 px-4 pt-4 sm:px-5">
           <div className="min-w-[12rem] flex-1">
             {title && <h2 className="text-sm font-semibold text-ink">{title}</h2>}
             {description && <p className="mt-0.5 text-xs text-muted">{description}</p>}
@@ -136,7 +136,7 @@ export function Card({
           {actions && <div className="flex flex-wrap items-center gap-2">{actions}</div>}
         </header>
       )}
-      <div className={cx("px-5 pb-5", title || actions ? "pt-4" : "pt-5", bodyClassName)}>{children}</div>
+      <div className={cx("px-4 pb-4 sm:px-5 sm:pb-5", title || actions ? "pt-4" : "pt-4 sm:pt-5", bodyClassName)}>{children}</div>
     </section>
   );
 }
@@ -202,10 +202,10 @@ export function PageHeader({
       {eyebrow && <div className="mb-2 text-xs text-muted">{eyebrow}</div>}
       <div className="flex flex-wrap items-end justify-between gap-4">
         <div className="min-w-0">
-          <h1 className="text-2xl font-semibold tracking-tight">{title}</h1>
+          <h1 className="text-[22px] font-semibold tracking-tight sm:text-2xl">{title}</h1>
           {description && <p className="mt-1 max-w-3xl text-sm text-muted">{description}</p>}
         </div>
-        {actions && <div className="flex flex-wrap items-center gap-2">{actions}</div>}
+        {actions && <div className="flex w-full flex-wrap items-center gap-2 sm:w-auto [&>*]:flex-1 sm:[&>*]:flex-none">{actions}</div>}
       </div>
       {children}
     </div>
@@ -241,7 +241,7 @@ export function Stat({
 
 export function StatCard(props: React.ComponentProps<typeof Stat> & { href?: string }) {
   const inner = (
-    <div className="h-full rounded-xl border border-line bg-panel p-4 shadow-[var(--shadow-card)] transition-colors">
+    <div className="h-full rounded-xl border border-line bg-panel p-3.5 shadow-[var(--shadow-card)] transition-colors sm:p-4">
       <Stat {...props} />
     </div>
   );
@@ -341,7 +341,7 @@ export function Segmented<T extends string>({
   size?: "sm" | "md";
 }) {
   return (
-    <div role="group" aria-label={label} className="inline-flex rounded-lg bg-sunken p-0.5">
+    <div role="group" aria-label={label} className="inline-flex max-w-full overflow-x-auto rounded-lg bg-sunken p-0.5 [scrollbar-width:none]">
       {options.map((o) => (
         <button
           key={o.value}
@@ -350,8 +350,8 @@ export function Segmented<T extends string>({
           aria-pressed={o.value === value}
           onClick={() => onChange(o.value)}
           className={cx(
-            "rounded-md font-medium transition-colors",
-            size === "sm" ? "px-2.5 py-1 text-xs" : "px-3 py-1.5 text-sm",
+            "shrink-0 whitespace-nowrap rounded-md font-medium transition-colors",
+            size === "sm" ? "px-3 py-2.5 text-xs sm:px-2.5 sm:py-1" : "px-3.5 py-2.5 text-sm sm:px-3 sm:py-1.5",
             o.value === value ? "bg-panel text-ink shadow-sm" : "text-muted hover:text-ink",
           )}
         >
@@ -376,8 +376,8 @@ export function Tabs<T extends string>({
   label: string;
 }) {
   return (
-    <div className="-mx-1 mb-5 overflow-x-auto border-b border-line">
-      <div role="tablist" aria-label={label} className="flex min-w-max gap-1 px-1">
+    <div className="-mx-4 mb-5 overflow-x-auto border-b border-line [scrollbar-width:none] sm:-mx-1">
+      <div role="tablist" aria-label={label} className="flex min-w-max gap-1 px-4 sm:px-1">
         {tabs.map((t) => (
           <button
             key={t.value}
@@ -385,7 +385,7 @@ export function Tabs<T extends string>({
             aria-selected={t.value === value}
             onClick={() => onChange(t.value)}
             className={cx(
-              "-mb-px inline-flex items-center gap-2 border-b-2 px-3 py-2.5 text-sm font-medium transition-colors",
+              "-mb-px inline-flex items-center gap-2 border-b-2 px-3 py-3 text-sm font-medium transition-colors sm:py-2.5",
               t.value === value ? "border-accent text-ink" : "border-transparent text-muted hover:text-ink",
             )}
           >
@@ -401,18 +401,18 @@ export function Tabs<T extends string>({
 /* ------------------------------------------------------------------ Forms */
 
 const control =
-  "w-full rounded-md border border-line bg-panel px-3 text-sm text-ink placeholder:text-subtle transition-colors focus:border-accent focus:outline-none focus:ring-2 focus:ring-accent/20 disabled:opacity-50";
+  "w-full rounded-md border border-line bg-panel px-3 text-base text-ink sm:text-sm placeholder:text-subtle transition-colors focus:border-accent focus:outline-none focus:ring-2 focus:ring-accent/20 disabled:opacity-50";
 
 export const Input = forwardRef<HTMLInputElement, React.InputHTMLAttributes<HTMLInputElement>>(function Input(
   { className, ...rest },
   ref,
 ) {
-  return <input ref={ref} className={cx(control, "h-9", className)} {...rest} />;
+  return <input ref={ref} className={cx(control, "h-11 sm:h-9", className)} {...rest} />;
 });
 
 export function Select({ className, children, ...rest }: React.SelectHTMLAttributes<HTMLSelectElement>) {
   return (
-    <select className={cx(control, "h-9 pr-8", className)} {...rest}>
+    <select className={cx(control, "h-11 pr-8 sm:h-9", className)} {...rest}>
       {children}
     </select>
   );
@@ -447,7 +447,7 @@ export function Field({
 
 export function Table({ children, className }: { children: React.ReactNode; className?: string }) {
   return (
-    <div className={cx("-mx-5 overflow-x-auto", className)}>
+    <div className={cx("-mx-4 overflow-x-auto sm:-mx-5", className)}>
       <table className="w-full min-w-full text-sm">{children}</table>
     </div>
   );
@@ -466,7 +466,7 @@ export function Th({
     <th
       scope="col"
       className={cx(
-        "whitespace-nowrap border-b border-line px-3 py-2 text-xs font-medium text-muted first:pl-5 last:pr-5",
+        "whitespace-nowrap border-b border-line px-3 py-2 text-xs font-medium text-muted first:pl-4 last:pr-4 sm:first:pl-5 sm:last:pr-5",
         align === "right" ? "text-right" : align === "center" ? "text-center" : "text-left",
         className,
       )}
@@ -496,7 +496,7 @@ export function Td({
       title={title}
       colSpan={colSpan}
       className={cx(
-        "border-b border-line px-3 py-2.5 align-middle first:pl-5 last:pr-5",
+        "border-b border-line px-3 py-2.5 align-middle first:pl-4 last:pr-4 sm:first:pl-5 sm:last:pr-5",
         align === "right" ? "text-right" : align === "center" ? "text-center" : "",
         mono && "font-mono text-[13px]",
         className,
@@ -522,4 +522,47 @@ export function KeyValues({ items, className }: { items: [React.ReactNode, React
 
 export function SectionLabel({ children }: { children: React.ReactNode }) {
   return <h3 className="mb-2 text-xs font-semibold uppercase tracking-wider text-subtle">{children}</h3>;
+}
+
+/* ------------------------------------------------------ Phone list views */
+
+/** Table-free list for phones (hidden from `sm` up, where the table shows). */
+export function MobileList({ children, className }: { children: React.ReactNode; className?: string }) {
+  return <ul className={cx("-mx-4 divide-y divide-line border-y border-line sm:hidden", className)}>{children}</ul>;
+}
+
+export function MobileItem({
+  children,
+  onClick,
+  href,
+  className,
+}: {
+  children: React.ReactNode;
+  onClick?: () => void;
+  href?: string;
+  className?: string;
+}) {
+  const cls = cx("block w-full px-4 py-3 text-left", (onClick || href) && "active:bg-hover", className);
+  if (href)
+    return (
+      <li>
+        <Link href={href} className={cls}>
+          {children}
+        </Link>
+      </li>
+    );
+  if (onClick)
+    return (
+      <li>
+        <button type="button" onClick={onClick} className={cls}>
+          {children}
+        </button>
+      </li>
+    );
+  return <li className={cls}>{children}</li>;
+}
+
+/** Wraps a desktop table so phones get the MobileList instead. */
+export function DesktopOnly({ children }: { children: React.ReactNode }) {
+  return <div className="hidden sm:block">{children}</div>;
 }

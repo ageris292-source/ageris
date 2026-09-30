@@ -14,11 +14,13 @@ import { FreshnessBadge } from "@/components/ui/Status";
 import {
   Button,
   Card,
+  DesktopOnly,
   EmptyState,
   Field,
   IconButton,
   Input,
   LoadingRows,
+  MobileList,
   PageHeader,
   Segmented,
   Table,
@@ -195,9 +197,26 @@ export default function StocksPage() {
 
       <Card bodyClassName="pb-2">
         <div className="mb-4 flex flex-wrap items-center gap-3">
-          <div className="relative min-w-[220px] flex-1 sm:max-w-sm">
+          <div className="relative w-full sm:min-w-[220px] sm:max-w-sm sm:flex-1">
             <Search size={16} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-subtle" aria-hidden />
             <Input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Filter by ticker or name" className="pl-9" aria-label="Filter stocks" />
+          </div>
+          <div className="flex w-full items-center gap-2 sm:hidden">
+            <label htmlFor="sort-m" className="text-xs text-muted">Sort</label>
+            <select
+              id="sort-m"
+              value={`${sort[0]}:${sort[1]}`}
+              onChange={(e) => {
+                const [k, d] = e.target.value.split(":");
+                setSort([k as SortKey, Number(d) as 1 | -1]);
+              }}
+              className="h-10 flex-1 rounded-md border border-line bg-panel px-3 text-ink"
+            >
+              <option value="ticker:1">Ticker A → Z</option>
+              <option value="change:-1">Biggest gainers</option>
+              <option value="change:1">Biggest losers</option>
+              <option value="last:-1">Highest price</option>
+            </select>
           </div>
           <Segmented<Filter>
             label="Show"
@@ -225,6 +244,33 @@ export default function StocksPage() {
           <EmptyState compact icon={<Search size={20} />} title="No stocks match" body={filter === "watch" ? "Star stocks to add them to your watchlist." : "Try a different filter."} />
         )}
         {rows.length > 0 && (
+          <MobileList className="mb-2">
+            {rows.map((s) => (
+              <li key={s.ticker} className="flex items-center gap-1 pr-4 active:bg-hover">
+                <span className="pl-2">
+                  <WatchStar on={has(s.ticker)} ticker={s.ticker} onToggle={() => toggle(s.ticker)} size={18} />
+                </span>
+                <Link href={`/stocks/${encodeURIComponent(s.ticker)}`} className="flex min-w-0 flex-1 items-center gap-3 py-3">
+                  <div className="min-w-0 flex-1">
+                    <p className="font-mono text-[13px] font-semibold">{s.ticker}</p>
+                    <p className="truncate text-xs text-muted">{s.name ?? s.exchange}</p>
+                  </div>
+                  <div className="text-right">
+                    <p className="font-mono text-[13px]">{inr(s.last_close)}</p>
+                    <p className={cx("font-mono text-xs", toneOf(s.change_pct))}>{signedPct(s.change_pct)}</p>
+                  </div>
+                </Link>
+                {s.freshness.status !== "PASS" && (
+                  <span className="ml-1" title={s.freshness.reason}>
+                    <FreshnessBadge f={s.freshness} />
+                  </span>
+                )}
+              </li>
+            ))}
+          </MobileList>
+        )}
+        {rows.length > 0 && (
+          <DesktopOnly>
           <Table>
             <thead>
               <tr>
@@ -277,6 +323,7 @@ export default function StocksPage() {
               ))}
             </tbody>
           </Table>
+          </DesktopOnly>
         )}
       </Card>
 

@@ -3,8 +3,10 @@
 import {
   Bell,
   ChevronDown,
+  LayoutDashboard,
+  LayoutGrid,
+  LineChart,
   LogOut,
-  Menu,
   Monitor,
   Moon,
   OctagonPause,
@@ -13,7 +15,8 @@ import {
   ShieldCheck,
   Sun,
   TriangleAlert,
-  X,
+  Trophy,
+  Wallet,
 } from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
@@ -21,7 +24,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { useSession } from "@/components/providers/SessionProvider";
 import { useTheme, type ThemePref } from "@/components/providers/ThemeProvider";
 import { ForcedPasswordScreen, LoginScreen } from "@/components/shell/AuthScreens";
-import { Brand } from "@/components/shell/Brand";
+import { Brand, BrandMark } from "@/components/shell/Brand";
 import { CommandPalette } from "@/components/shell/CommandPalette";
 import { ACCOUNT_ITEM, NAV, isActive } from "@/components/shell/nav";
 import { cx } from "@/components/ui/core";
@@ -225,15 +228,125 @@ function UserMenu() {
   );
 }
 
+const TABS = [
+  { href: "/", label: "Home", icon: LayoutDashboard },
+  { href: "/stocks", label: "Stocks", icon: LineChart },
+  { href: "/ranking", label: "Ideas", icon: Trophy },
+  { href: "/paper", label: "Paper", icon: Wallet },
+];
+
+/** Thumb-reachable navigation for phones and tablets. */
+function BottomNav({ onMore, moreOpen, unread }: { onMore: () => void; moreOpen: boolean; unread: number | null }) {
+  const path = usePathname();
+  const inTabs = TABS.some((t) => isActive(path, t.href));
+  return (
+    <nav aria-label="Primary" className="pb-safe fixed inset-x-0 bottom-0 z-40 border-t border-line bg-panel/95 backdrop-blur-md lg:hidden">
+      <ul className="mx-auto flex max-w-lg">
+        {TABS.map((t) => {
+          const active = isActive(path, t.href) && !moreOpen;
+          return (
+            <li key={t.href} className="flex-1">
+              <Link
+                href={t.href}
+                aria-current={active ? "page" : undefined}
+                className={cx("flex h-16 flex-col items-center justify-center gap-1 text-[11px] font-medium", active ? "text-accent" : "text-subtle active:text-ink")}
+              >
+                <t.icon size={22} strokeWidth={active ? 2.3 : 1.9} aria-hidden />
+                {t.label}
+              </Link>
+            </li>
+          );
+        })}
+        <li className="flex-1">
+          <button
+            onClick={onMore}
+            aria-expanded={moreOpen}
+            aria-haspopup="dialog"
+            className={cx("relative flex h-16 w-full flex-col items-center justify-center gap-1 text-[11px] font-medium", moreOpen || !inTabs ? "text-accent" : "text-subtle")}
+          >
+            <LayoutGrid size={22} strokeWidth={moreOpen || !inTabs ? 2.3 : 1.9} aria-hidden />
+            More
+            {unread !== null && unread > 0 && <span className="absolute right-[calc(50%-18px)] top-2.5 h-2 w-2 rounded-full bg-fail" aria-label={`${unread} unread alerts`} />}
+          </button>
+        </li>
+      </ul>
+    </nav>
+  );
+}
+
+function MoreSheet({ open, onClose, unread, risk }: { open: boolean; onClose: () => void; unread: number | null; risk: RiskStatus | null }) {
+  const path = usePathname();
+  const { isAdmin, me, signOut } = useSession();
+  useEffect(() => {
+    if (!open) return;
+    const esc = (e: KeyboardEvent) => e.key === "Escape" && onClose();
+    document.addEventListener("keydown", esc);
+    document.body.style.overflow = "hidden";
+    return () => {
+      document.removeEventListener("keydown", esc);
+      document.body.style.overflow = "";
+    };
+  }, [open, onClose]);
+  if (!open) return null;
+  const items = [...NAV.flatMap((g) => g.items).filter((i) => !i.adminOnly || isAdmin), ACCOUNT_ITEM];
+  return (
+    <div className="fixed inset-0 z-30 lg:hidden" role="dialog" aria-modal="true" aria-label="All sections">
+      <div className="absolute inset-0 bg-black/40" onClick={onClose} aria-hidden />
+      <div className="animate-sheet absolute inset-x-0 bottom-[calc(4rem+env(safe-area-inset-bottom))] max-h-[calc(100dvh-8rem)] overflow-y-auto rounded-t-2xl border-t border-line bg-panel px-4 pb-4 pt-3 shadow-[var(--shadow-pop)]">
+        <div className="mx-auto mb-3 h-1 w-10 rounded-full bg-line-strong" aria-hidden />
+        <div className="mb-3 flex items-center justify-between">
+          <div className="min-w-0">
+            <p className="truncate text-sm font-medium">{me?.email}</p>
+            <p className="text-xs capitalize text-muted">{me?.role}</p>
+          </div>
+          <ThemeSwitch />
+        </div>
+        <ul className="grid grid-cols-3 gap-2">
+          {items.map((i) => {
+            const active = isActive(path, i.href);
+            return (
+              <li key={i.href}>
+                <Link
+                  href={i.href}
+                  onClick={onClose}
+                  aria-current={active ? "page" : undefined}
+                  className={cx(
+                    "relative flex h-[76px] flex-col items-center justify-center gap-1.5 rounded-xl border px-1 text-center text-xs font-medium",
+                    active ? "border-accent/40 bg-accent-soft text-accent" : "border-line text-muted active:bg-hover",
+                  )}
+                >
+                  <i.icon size={20} aria-hidden />
+                  <span className="leading-tight">{i.label}</span>
+                  {i.href === "/alerts" && unread !== null && unread > 0 && (
+                    <span className="absolute right-2 top-2 rounded-full bg-fail px-1.5 text-[10px] font-semibold leading-4 text-white">{unread > 99 ? "99+" : unread}</span>
+                  )}
+                </Link>
+              </li>
+            );
+          })}
+        </ul>
+        <div className="mt-3">
+          <TradingStatus risk={risk} />
+        </div>
+        <button onClick={signOut} className="mt-3 flex h-11 w-full items-center justify-center gap-2 rounded-lg border border-line text-sm font-medium text-fail active:bg-hover">
+          <LogOut size={16} aria-hidden /> Sign out
+        </button>
+      </div>
+    </div>
+  );
+}
+
 export function AppShell({ children }: { children: React.ReactNode }) {
   const { token, ready, me, health } = useSession();
-  const [drawer, setDrawer] = useState(false);
   const [palette, setPalette] = useState(false);
+  const [more, setMore] = useState(false);
   const path = usePathname();
   const unread = useUnreadAlerts();
   const risk = useRisk();
 
-  useEffect(() => setDrawer(false), [path]);
+  useEffect(() => {
+    setMore(false);
+  }, [path]);
 
   const onKey = useCallback((e: KeyboardEvent) => {
     if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "k") {
@@ -269,7 +382,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           <Brand />
         </Link>
       </div>
-      <SidebarNav unread={unread} onNavigate={() => setDrawer(false)} />
+      <SidebarNav unread={unread} />
       <div className="space-y-2 border-t border-line p-3">
         <TradingStatus risk={risk} />
         <Link
@@ -293,37 +406,26 @@ export function AppShell({ children }: { children: React.ReactNode }) {
 
       <aside className="fixed inset-y-0 left-0 z-30 hidden w-64 flex-col border-r border-line bg-panel lg:flex">{sidebar}</aside>
 
-      {drawer && (
-        <div className="fixed inset-0 z-50 lg:hidden">
-          <div className="absolute inset-0 bg-black/50" onClick={() => setDrawer(false)} aria-hidden />
-          <aside className="animate-in absolute inset-y-0 left-0 flex w-72 max-w-[85vw] flex-col bg-panel shadow-[var(--shadow-pop)]" aria-label="Navigation">
-            <button onClick={() => setDrawer(false)} className="absolute right-3 top-4 rounded-md p-1.5 text-subtle hover:bg-hover" aria-label="Close navigation">
-              <X size={18} />
-            </button>
-            {sidebar}
-          </aside>
-        </div>
-      )}
-
-      <header className="sticky top-0 z-20 flex h-16 items-center gap-3 border-b border-line bg-surface/85 px-4 backdrop-blur-md sm:px-6">
-        <button onClick={() => setDrawer(true)} className="rounded-md p-2 text-muted hover:bg-hover lg:hidden" aria-label="Open navigation">
-          <Menu size={20} />
-        </button>
+      <header className="pt-safe sticky top-0 z-20 border-b border-line bg-surface/85 backdrop-blur-md">
+        <div className="flex h-14 items-center gap-2 px-3 sm:h-16 sm:gap-3 sm:px-6">
+        <Link href="/" aria-label="Aegis home" className="shrink-0 p-1 lg:hidden">
+          <BrandMark size={28} />
+        </Link>
         <button
           onClick={() => setPalette(true)}
-          className="flex h-9 w-full max-w-md items-center gap-2 rounded-lg border border-line bg-panel px-3 text-sm text-subtle transition-colors hover:border-line-strong"
+          className="flex h-10 w-full max-w-md items-center gap-2 rounded-lg border border-line bg-panel px-3 text-sm text-subtle transition-colors hover:border-line-strong sm:h-9"
         >
           <Search size={16} aria-hidden />
-          <span className="flex-1 truncate text-left">Search stocks, pages…</span>
-          <kbd className="hidden rounded border border-line px-1.5 text-[10px] sm:inline">⌘K</kbd>
+          <span className="flex-1 truncate text-left"><span className="sm:hidden">Search</span><span className="hidden sm:inline">Search stocks, pages…</span></span>
+          <kbd className="hidden rounded border border-line px-1.5 text-[10px] lg:inline">⌘K</kbd>
         </button>
-        <div className="ml-auto flex items-center gap-1 sm:gap-2">
+        <div className="ml-auto flex items-center gap-0.5 sm:gap-2">
           {risk?.kill_switch.active && (
-            <Link href="/system" className="hidden items-center gap-1.5 rounded-full bg-fail-soft px-2.5 py-1 text-xs font-medium text-fail md:inline-flex">
-              <OctagonPause size={13} aria-hidden /> Trading halted
+            <Link href="/system" aria-label="Trading halted" className="inline-flex h-10 items-center gap-1.5 rounded-full bg-fail-soft px-2.5 text-xs font-medium text-fail sm:h-auto sm:py-1">
+              <OctagonPause size={15} aria-hidden /> <span className="hidden md:inline">Trading halted</span>
             </Link>
           )}
-          <Link href="/alerts" className="relative rounded-lg p-2 text-muted hover:bg-hover hover:text-ink" aria-label={unread ? `Alerts, ${unread} unread` : "Alerts"}>
+          <Link href="/alerts" className="relative flex h-11 w-11 items-center justify-center rounded-lg text-muted hover:bg-hover hover:text-ink sm:h-auto sm:w-auto sm:p-2" aria-label={unread ? `Alerts, ${unread} unread` : "Alerts"}>
             <Bell size={19} />
             {unread !== null && unread > 0 && (
               <span className="absolute right-1 top-1 flex h-4 min-w-4 items-center justify-center rounded-full bg-fail px-1 text-[10px] font-semibold text-white">
@@ -331,7 +433,13 @@ export function AppShell({ children }: { children: React.ReactNode }) {
               </span>
             )}
           </Link>
-          <UserMenu />
+          <div className="hidden lg:block">
+            <UserMenu />
+          </div>
+          <Link href="/account" aria-label="Account settings" className="flex h-11 w-11 items-center justify-center lg:hidden">
+            <span className="flex h-8 w-8 items-center justify-center rounded-full bg-accent text-xs font-semibold text-on-accent">{(me.email ?? "?").slice(0, 2).toUpperCase()}</span>
+          </Link>
+        </div>
         </div>
       </header>
 
@@ -346,13 +454,15 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         </div>
       )}
 
-      <main id="main" className="mx-auto w-full min-w-0 max-w-[1400px] px-4 py-6 sm:px-6 lg:px-8 lg:py-8">
+      <main id="main" className="mx-auto w-full min-w-0 max-w-[1400px] px-4 py-5 sm:px-6 sm:py-6 lg:px-8 lg:py-8">
         {children}
       </main>
-      <footer className="mx-auto max-w-[1400px] px-4 pb-8 text-center text-xs text-subtle sm:px-6 lg:px-8">
+      <footer className="mx-auto max-w-[1400px] px-4 pb-[calc(5.5rem+env(safe-area-inset-bottom))] text-center text-xs text-subtle sm:px-6 lg:px-8 lg:pb-8">
         Aegis is a research tool, not investment advice. Past results do not predict future results. Live trading is disabled.
       </footer>
 
+      <MoreSheet open={more} onClose={() => setMore(false)} unread={unread} risk={risk} />
+      <BottomNav onMore={() => setMore((v) => !v)} moreOpen={more} unread={unread} />
       <CommandPalette open={palette} onClose={() => setPalette(false)} />
     </div>
   );

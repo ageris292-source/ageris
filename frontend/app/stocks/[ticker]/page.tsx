@@ -256,14 +256,14 @@ export default function StockPage() {
   return (
     <div className="space-y-6">
       <div>
-        <Link href="/stocks" className="inline-flex items-center gap-1 text-sm text-muted hover:text-ink">
+        <Link href="/stocks" className="-my-2 inline-flex items-center gap-1 py-2.5 pr-3 text-sm text-muted hover:text-ink">
           <ArrowLeft size={15} aria-hidden /> Stocks
         </Link>
-        <div className="mt-3 flex flex-wrap items-start justify-between gap-4">
+        <div className="mt-3 flex flex-col gap-4 sm:flex-row sm:flex-wrap sm:items-start sm:justify-between">
           <div className="min-w-0">
             {detail ? (
               <>
-                <h1 className="text-2xl font-semibold tracking-tight">{detail.name ?? detail.ticker}</h1>
+                <h1 className="text-[22px] font-semibold leading-tight tracking-tight sm:text-2xl">{detail.name ?? detail.ticker}</h1>
                 <div className="mt-1 flex flex-wrap items-center gap-2 text-sm text-muted">
                   <span className="font-mono">{detail.ticker}</span>
                   <span aria-hidden>·</span>
@@ -279,9 +279,9 @@ export default function StockPage() {
               </>
             )}
           </div>
-          <div className="flex flex-col items-end gap-3">
+          <div className="flex flex-col gap-3 sm:ml-auto sm:items-end">
             {lb ? (
-              <div className="text-right">
+              <div className="sm:text-right">
                 <div className="text-3xl font-semibold tracking-tight tabular-nums">{inr(Number(lb.close))}</div>
                 <div className="mt-0.5 text-sm">
                   <span className={cx("font-medium tabular-nums", toneOf(detail?.change_pct))}>{signedPct(detail?.change_pct)}</span>
@@ -293,10 +293,10 @@ export default function StockPage() {
             ) : (
               <Skeleton className="h-10 w-40" />
             )}
-            <div className="flex flex-wrap justify-end gap-2">
+            <div className="grid grid-cols-[auto_auto_minmax(0,1fr)] gap-2 sm:flex sm:justify-end">
               <WatchStar on={has(ticker)} ticker={ticker} onToggle={() => toggle(ticker)} withLabel />
-              <Button onClick={refresh} loading={refreshing} icon={<RefreshCw size={15} />}>
-                Refresh data
+              <Button onClick={refresh} loading={refreshing} icon={<RefreshCw size={15} />} aria-label="Refresh data">
+                <span className="hidden sm:inline">Refresh data</span>
               </Button>
               <LinkButton href={tradeHref} variant="primary" icon={<ShieldCheck size={15} />}>
                 Evaluate a trade

@@ -53,6 +53,26 @@ role or deactivating an account bumps it, so older sessions stop working at
 once. An admin cannot demote or deactivate themselves, and the last active
 admin can never be removed.
 
+## Phones and tablets
+
+The app is built for phones first and is checked at 320, 360 and 390 px wide,
+on iPhone and Android, and on tablets in landscape.
+
+- **Navigation.** Below 1024 px a bottom tab bar replaces the sidebar. It holds
+  Home, Stocks, Ideas and Paper. A **More** sheet holds every other section,
+  plus your account, theme, trading status and sign out.
+- **Lists instead of wide tables.** On phones, tables become tappable rows
+  (`MobileList` / `MobileItem`), and the full table appears from 640 px up.
+- **Touch.** Controls are at least 44 px tall. Inputs use 16 px text, so iOS
+  never zooms in on focus.
+- **Dialogs.** Dialogs open as bottom sheets, with full-width buttons.
+- **Notches.** The layout respects the notch and home-indicator areas
+  (`viewport-fit=cover` plus safe-area insets).
+- **Charts.** Charts get shorter and use narrower axes on phones.
+- **Install.** It is installable as an app: a web manifest, home-screen icons
+  and an Apple touch icon. In Safari choose Share → Add to Home Screen; in
+  Chrome choose Install app.
+
 ## Local development
 
 ```bash

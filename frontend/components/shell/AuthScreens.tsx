@@ -96,7 +96,7 @@ export function LoginScreen() {
         <p className="relative mt-12 text-xs text-white/45">Not investment advice. Past results do not predict future results.</p>
       </aside>
 
-      <section className="flex items-center justify-center px-5 py-12">
+      <section className="pt-safe pb-safe flex items-center justify-center px-5 py-12">
         <div className="w-full max-w-sm">
           <div className="mb-8 flex items-center gap-3 lg:hidden">
             <BrandMark size={32} />

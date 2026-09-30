@@ -11,10 +11,12 @@ import {
   Button,
   Callout,
   Card,
+  DesktopOnly,
   EmptyState,
   Field,
   Input,
   LoadingRows,
+  MobileList,
   PageHeader,
   Select,
   Table,
@@ -61,15 +63,15 @@ function RowMenu({ u, self, onAction }: { u: UserAdmin; self: boolean; onAction:
   if (self) return <span className="text-xs text-subtle">You</span>;
   return (
     <div ref={ref} className="relative inline-block">
-      <button onClick={() => setOpen((v) => !v)} aria-haspopup="menu" aria-expanded={open} aria-label={`Actions for ${u.email}`} className="rounded-md p-1.5 text-muted hover:bg-hover hover:text-ink">
-        <MoreHorizontal size={16} />
+      <button onClick={() => setOpen((v) => !v)} aria-haspopup="menu" aria-expanded={open} aria-label={`Actions for ${u.email}`} className="rounded-md p-2.5 text-muted hover:bg-hover hover:text-ink sm:p-1.5">
+        <MoreHorizontal size={18} />
       </button>
       {open && (
         <div role="menu" className="animate-in absolute right-0 z-20 mt-1 w-52 rounded-lg border border-line bg-elevated p-1 text-left shadow-[var(--shadow-pop)]">
-          <button role="menuitem" onClick={() => { setOpen(false); onAction("reset"); }} className="flex w-full items-center gap-2 rounded-md px-3 py-2 text-sm hover:bg-hover">
+          <button role="menuitem" onClick={() => { setOpen(false); onAction("reset"); }} className="flex w-full items-center gap-2 rounded-md px-3 py-3 text-sm hover:bg-hover sm:py-2">
             <KeyRound size={14} aria-hidden /> Reset password
           </button>
-          <button role="menuitem" onClick={() => { setOpen(false); onAction("toggle"); }} className={cx("flex w-full items-center gap-2 rounded-md px-3 py-2 text-sm hover:bg-hover", u.is_active && "text-fail")}>
+          <button role="menuitem" onClick={() => { setOpen(false); onAction("toggle"); }} className={cx("flex w-full items-center gap-2 rounded-md px-3 py-3 text-sm hover:bg-hover sm:py-2", u.is_active && "text-fail")}>
             <Lock size={14} aria-hidden /> {u.is_active ? "Deactivate" : "Reactivate"}
           </button>
         </div>
@@ -173,6 +175,37 @@ export default function UsersPage() {
         <Card className="xl:col-span-2" bodyClassName="pb-2" title="Team" description={users ? `${users.filter((u) => u.is_active).length} active of ${users.length}` : undefined}>
           {users === null && <LoadingRows rows={4} />}
           {users && users.length > 0 && (
+            <MobileList className="mb-2">
+              {users.map((u) => {
+                const self = u.email === me?.email;
+                return (
+                  <li key={u.id} className={cx("px-4 py-3", !u.is_active && "opacity-60")}>
+                    <div className="flex items-center gap-3">
+                      <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-sunken text-xs font-semibold text-muted">{u.email.slice(0, 2).toUpperCase()}</span>
+                      <div className="min-w-0 flex-1">
+                        <p className="truncate text-sm font-medium">{u.email}</p>
+                        <p className="text-xs text-subtle">{u.last_login_at ? `Signed in ${ago(u.last_login_at)}` : "Never signed in"}</p>
+                      </div>
+                      <RowMenu u={u} self={self} onAction={(action) => setPending({ u, action })} />
+                    </div>
+                    <div className="mt-2 flex items-center gap-2 pl-12">
+                      {self ? (
+                        <Badge tone="info" className="capitalize">{u.role}</Badge>
+                      ) : (
+                        <Select aria-label={`Role for ${u.email}`} value={u.role} onChange={(e) => changeRole(u, e.target.value as "admin" | "analyst")} className="!h-10 w-36" disabled={!u.is_active}>
+                          <option value="analyst">Analyst</option>
+                          <option value="admin">Admin</option>
+                        </Select>
+                      )}
+                      {!u.is_active ? <Badge>Deactivated</Badge> : u.must_change_password ? <Badge tone="warn">Invite pending</Badge> : <Badge tone="pass">Active</Badge>}
+                    </div>
+                  </li>
+                );
+              })}
+            </MobileList>
+          )}
+          {users && users.length > 0 && (
+            <DesktopOnly>
             <Table>
               <thead>
                 <tr>
@@ -219,6 +252,7 @@ export default function UsersPage() {
                 })}
               </tbody>
             </Table>
+            </DesktopOnly>
           )}
         </Card>
 

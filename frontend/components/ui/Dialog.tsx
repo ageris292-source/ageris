@@ -71,11 +71,12 @@ export function Dialog({
         aria-labelledby="dialog-title"
         tabIndex={-1}
         className={cx(
-          "animate-in relative max-h-[92vh] w-full overflow-y-auto rounded-t-2xl border border-line bg-elevated shadow-[var(--shadow-pop)] sm:rounded-2xl",
+          "animate-sheet pb-safe relative max-h-[92dvh] w-full overflow-y-auto rounded-t-2xl border border-line bg-elevated shadow-[var(--shadow-pop)] sm:rounded-2xl sm:pb-0",
           size === "sm" ? "sm:max-w-md" : size === "lg" ? "sm:max-w-3xl" : "sm:max-w-lg",
         )}
       >
-        <div className="flex items-start justify-between gap-4 px-5 pt-5">
+        <div className="mx-auto mt-2.5 h-1 w-10 rounded-full bg-line-strong sm:hidden" aria-hidden />
+        <div className="flex items-start justify-between gap-4 px-5 pt-3 sm:pt-5">
           <div>
             <h2 id="dialog-title" className="text-base font-semibold">
               {title}
@@ -86,13 +87,13 @@ export function Dialog({
             data-close
             onClick={onClose}
             aria-label="Close"
-            className="rounded-md p-1 text-subtle hover:bg-hover hover:text-ink"
+            className="-mr-2 -mt-1 rounded-md p-2 text-subtle hover:bg-hover hover:text-ink sm:mr-0 sm:mt-0 sm:p-1"
           >
             <X size={18} />
           </button>
         </div>
         {children && <div className="px-5 pt-4">{children}</div>}
-        <div className="flex flex-wrap justify-end gap-2 px-5 pb-5 pt-5">{footer}</div>
+        <div className="flex flex-col-reverse gap-2 px-5 pb-5 pt-5 sm:flex-row sm:flex-wrap sm:justify-end [&>*]:w-full sm:[&>*]:w-auto">{footer}</div>
       </div>
     </div>
   );

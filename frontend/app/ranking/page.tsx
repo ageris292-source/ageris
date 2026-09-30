@@ -5,7 +5,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
 import { Bar, BarChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis, type TooltipProps } from "recharts";
-import { ChartTooltipBox } from "@/components/charts";
+import { ChartTooltipBox, useNarrow } from "@/components/charts";
 import { usePageTitle } from "@/components/usePageTitle";
 import { useSession } from "@/components/providers/SessionProvider";
 import { useChartColors } from "@/components/providers/ThemeProvider";
@@ -16,9 +16,11 @@ import {
   Button,
   Callout,
   Card,
+  DesktopOnly,
   EmptyState,
   LinkButton,
   LoadingRows,
+  MobileList,
   PageHeader,
   Segmented,
   Table,
@@ -31,6 +33,7 @@ import { ago, inr, istDateTime, num, pct, signedPct, toneOf } from "@/lib/format
 
 function GateChart({ data }: { data: { gate: string; n: number }[] }) {
   const c = useChartColors();
+  const narrow = useNarrow();
   const Tip = ({ active, payload }: TooltipProps<number, string>) =>
     active && payload?.length ? (
       <ChartTooltipBox title={String((payload[0].payload as { gate: string }).gate)} rows={[["Stocks blocked first here", String(payload[0].value)]]} />
@@ -41,7 +44,7 @@ function GateChart({ data }: { data: { gate: string; n: number }[] }) {
         <BarChart data={data} layout="vertical" margin={{ left: 8, right: 16, top: 4, bottom: 4 }} barCategoryGap={6}>
           <CartesianGrid stroke={c.grid} horizontal={false} />
           <XAxis type="number" allowDecimals={false} tick={{ fill: c.axis, fontSize: 11 }} tickLine={false} axisLine={{ stroke: c.grid }} />
-          <YAxis type="category" dataKey="gate" width={150} tick={{ fill: c.axis, fontSize: 11 }} tickLine={false} axisLine={false} />
+          <YAxis type="category" dataKey="gate" width={narrow ? 104 : 150} tick={{ fill: c.axis, fontSize: 11 }} tickLine={false} axisLine={false} />
           <Tooltip content={<Tip />} cursor={{ fill: c.grid, opacity: 0.4 }} isAnimationActive={false} />
           <Bar dataKey="n" fill={c.s1} radius={[0, 4, 4, 0]} maxBarSize={26} isAnimationActive={false} />
         </BarChart>
@@ -166,6 +169,39 @@ export default function RankingPage() {
             {rows.length === 0 ? (
               <EmptyState compact title={show === "qualified" ? "Nothing qualified" : "No candidates"} body={show === "qualified" ? "“No trade” is a valid answer: the gates are doing their job." : undefined} />
             ) : (
+              <>
+              <MobileList className="mb-2">
+                {rows.map((r) => (
+                  <li key={r.ticker} className="px-4 py-3 active:bg-hover">
+                    <Link href={`/stocks/${encodeURIComponent(r.ticker)}`} className="block">
+                      <div className="flex items-start justify-between gap-3">
+                        <div className="min-w-0">
+                          <p className="text-sm">
+                            <span className="mr-1.5 font-mono text-xs text-subtle">{r.rank}</span>
+                            <span className="font-mono font-semibold">{r.ticker}</span>
+                          </p>
+                          <p className="truncate text-xs text-muted">{r.name ?? ""}</p>
+                        </div>
+                        {r.qualified ? (
+                          <Badge tone="pass" icon={<CheckCircle2 size={12} aria-hidden />}>Qualified</Badge>
+                        ) : (
+                          <Badge tone="neutral" icon={<XCircle size={12} aria-hidden />}>Blocked</Badge>
+                        )}
+                      </div>
+                      <div className="mt-2 grid grid-cols-3 gap-2 text-xs">
+                        <div><p className="text-subtle">Entry</p><p className="font-mono">{inr(r.entry)}</p></div>
+                        <div><p className="text-subtle">P(profit)</p><p className="font-mono">{pct(r.p_profit)}</p></div>
+                        <div><p className="text-subtle">R:R</p><p className="font-mono">{r.reward_risk == null ? "—" : num(r.reward_risk, 2)}</p></div>
+                      </div>
+                      {!r.qualified && r.first_failure && <p className="mt-2 font-mono text-[11px] text-muted">first blocking gate: {r.first_failure}</p>}
+                    </Link>
+                    {r.qualified && (
+                      <LinkButton href={tradeLink(r)} size="sm" variant="primary" icon={<ShieldCheck size={13} />} className="mt-3 w-full">Propose this trade</LinkButton>
+                    )}
+                  </li>
+                ))}
+              </MobileList>
+              <DesktopOnly>
               <Table>
                 <thead>
                   <tr>
@@ -222,6 +258,8 @@ export default function RankingPage() {
                   ))}
                 </tbody>
               </Table>
+              </DesktopOnly>
+              </>
             )}
           </Card>
 
@@ -276,7 +314,7 @@ export default function RankingPage() {
               ))}
             </ul>
             <p className="mt-3 text-xs text-subtle">
-              Qualified candidates need a live quote, a proposal on <Link href="/trade" className="text-accent hover:underline">New trade</Link> and human approval before any order.
+              Qualified candidates need a live quote, a proposal on <Link href="/trade" className="-my-3 inline-block py-3 text-accent hover:underline">New trade</Link> and human approval before any order.
             </p>
           </Card>
         </>

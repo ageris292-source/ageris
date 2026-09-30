@@ -14,10 +14,13 @@ import {
   Button,
   Callout,
   Card,
+  DesktopOnly,
   EmptyState,
   Field,
   Input,
   LoadingRows,
+  MobileItem,
+  MobileList,
   PageHeader,
   Segmented,
   StatCard,
@@ -33,6 +36,22 @@ const MONEY_KEYS = new Set(["equity", "cash", "invested"]);
 
 function Checks({ a }: { a: PortfolioAnalysis }) {
   return (
+    <>
+    <MobileList className="mb-2">
+      {a.checks.map((c) => (
+        <MobileItem key={c.name}>
+          <div className="flex items-center justify-between gap-3">
+            <span className="min-w-0">
+              <span className="break-all font-mono text-[13px]">{c.name}</span>
+              <span className="ml-1.5 text-[11px] text-subtle">{c.kind}</span>
+            </span>
+            <GateBadge s={c.status} />
+          </div>
+          <p className="mt-1 text-xs text-muted">{c.reason}</p>
+        </MobileItem>
+      ))}
+    </MobileList>
+    <DesktopOnly>
     <Table>
       <thead>
         <tr>
@@ -55,6 +74,8 @@ function Checks({ a }: { a: PortfolioAnalysis }) {
         ))}
       </tbody>
     </Table>
+    </DesktopOnly>
+    </>
   );
 }
 
@@ -220,6 +241,25 @@ export default function PortfoliosPage() {
                 <EmptyState compact title="No holdings" body={current.kind === "model" ? "Add a holding to analyse exposure." : "Filled paper orders appear here."} />
               )}
               {a && a.holdings.length > 0 && (
+                <MobileList className="mb-2">
+                  {a.holdings.map((x) => (
+                    <MobileItem key={x.ticker} href={`/stocks/${encodeURIComponent(x.ticker)}`}>
+                      <div className="flex items-center justify-between gap-3">
+                        <div className="min-w-0">
+                          <p className="font-mono text-[13px] font-semibold">{x.ticker}</p>
+                          <p className="truncate text-xs capitalize text-muted">{x.quantity} sh · {humanize(x.sector).toLowerCase()}</p>
+                        </div>
+                        <div className="text-right">
+                          <p className="font-mono text-[13px]">{inr(x.value, 0)}</p>
+                          <p className="text-xs text-muted">{pct(x.weight)} · <span className={toneOf(x.unrealised_pnl)}>{signedInr(x.unrealised_pnl)}</span></p>
+                        </div>
+                      </div>
+                    </MobileItem>
+                  ))}
+                </MobileList>
+              )}
+              {a && a.holdings.length > 0 && (
+                <DesktopOnly>
                 <Table>
                   <thead>
                     <tr>
@@ -249,6 +289,7 @@ export default function PortfoliosPage() {
                     ))}
                   </tbody>
                 </Table>
+                </DesktopOnly>
               )}
             </Card>
 
@@ -309,10 +350,10 @@ export default function PortfoliosPage() {
             }
             description="Checks limits, concentration and correlation before and after a hypothetical position."
           >
-            <form onSubmit={testFit} className="flex flex-wrap items-end gap-3">
-              <Field label="Ticker">{(id) => <Input id={id} className="w-40 font-mono uppercase" placeholder="TCS.NS" value={cand.ticker} onChange={(e) => setCand({ ...cand, ticker: e.target.value })} />}</Field>
-              <Field label="Target weight (% of equity)">{(id) => <Input id={id} className="w-28 font-mono" inputMode="decimal" value={cand.weight} onChange={(e) => setCand({ ...cand, weight: e.target.value })} />}</Field>
-              <Button type="submit" variant="primary" loading={fitBusy} disabled={!cand.ticker}>Check fit</Button>
+            <form onSubmit={testFit} className="grid grid-cols-2 items-end gap-3 sm:flex sm:flex-wrap">
+              <Field label="Ticker">{(id) => <Input id={id} className="font-mono uppercase sm:w-40" placeholder="TCS.NS" value={cand.ticker} onChange={(e) => setCand({ ...cand, ticker: e.target.value })} />}</Field>
+              <Field label="Weight (% of equity)">{(id) => <Input id={id} className="font-mono sm:w-28" inputMode="decimal" value={cand.weight} onChange={(e) => setCand({ ...cand, weight: e.target.value })} />}</Field>
+              <Button type="submit" variant="primary" loading={fitBusy} disabled={!cand.ticker} className="col-span-2 sm:col-span-1">Check fit</Button>
             </form>
             {fit && (
               <div className="mt-6 space-y-6">

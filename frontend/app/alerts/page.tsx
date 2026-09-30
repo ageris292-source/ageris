@@ -117,7 +117,7 @@ export default function AlertsPage() {
                     <p className="mt-2 whitespace-pre-line text-sm text-muted">{a.body}</p>
                     <div className="mt-3 flex flex-wrap items-center gap-3 text-xs">
                       {a.link && (
-                        <Link href={a.link} className="inline-flex items-center gap-1 font-medium text-accent hover:underline" onClick={() => !a.read_at && void markRead(a.id)}>
+                        <Link href={a.link} className="-my-3 inline-flex items-center gap-1 py-3 pr-3 font-medium text-accent hover:underline" onClick={() => !a.read_at && void markRead(a.id)}>
                           Open <ArrowRight size={12} />
                         </Link>
                       )}
@@ -127,7 +127,7 @@ export default function AlertsPage() {
                         </span>
                       )}
                       {!a.read_at && (
-                        <button className="ml-auto font-medium text-muted hover:text-ink" onClick={() => markRead(a.id)}>
+                        <button className="-my-3 ml-auto py-3 pl-4 font-medium text-muted hover:text-ink" onClick={() => markRead(a.id)}>
                           Mark read
                         </button>
                       )}

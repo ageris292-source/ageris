@@ -31,6 +31,7 @@ export function CommandPalette({ open, onClose }: { open: boolean; onClose: () =
     if (!open) return;
     setQ("");
     setActive(0);
+    setStocks(null);
     setTimeout(() => input.current?.focus(), 10);
     guard((t) => api.stocks(t))
       .then((s) => s && setStocks(s))
@@ -67,7 +68,7 @@ export function CommandPalette({ open, onClose }: { open: boolean; onClose: () =
 
   if (!open) return null;
   return (
-    <div className="fixed inset-0 z-[75] flex items-start justify-center px-4 pt-[12vh]">
+    <div className="fixed inset-0 z-[75] flex items-start justify-center px-3 pt-[calc(env(safe-area-inset-top)+0.75rem)] sm:px-4 sm:pt-[12vh]">
       <div className="absolute inset-0 bg-black/40 backdrop-blur-[2px]" onClick={onClose} aria-hidden />
       <div role="dialog" aria-modal="true" aria-label="Search" className="animate-in relative w-full max-w-xl overflow-hidden rounded-2xl border border-line bg-elevated shadow-[var(--shadow-pop)]">
         <div className="flex items-center gap-3 border-b border-line px-4">
@@ -95,15 +96,16 @@ export function CommandPalette({ open, onClose }: { open: boolean; onClose: () =
             aria-expanded="true"
             aria-controls="palette-results"
           />
-          <kbd className="rounded border border-line px-1.5 py-0.5 text-[10px] text-subtle">Esc</kbd>
+          <kbd className="hidden rounded border border-line px-1.5 py-0.5 text-[10px] text-subtle sm:inline">Esc</kbd>
+          <button onClick={onClose} className="-mr-2 px-2 py-2 text-sm font-medium text-accent sm:hidden">Cancel</button>
         </div>
-        <ul id="palette-results" role="listbox" className="max-h-[50vh] overflow-y-auto p-2">
+        <ul id="palette-results" role="listbox" className="max-h-[60dvh] overflow-y-auto p-2 sm:max-h-[50vh]">
           {results.map((r, i) => (
             <li key={r.key} role="option" aria-selected={i === active}>
               <button
                 onMouseEnter={() => setActive(i)}
                 onClick={() => go(r)}
-                className={cx("flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-left", i === active ? "bg-hover" : "")}
+                className={cx("flex w-full items-center gap-3 rounded-lg px-3 py-3 text-left sm:py-2.5", i === active ? "bg-hover" : "")}
               >
                 <span className="text-subtle">{r.icon}</span>
                 <span className="min-w-0 flex-1">
@@ -115,7 +117,12 @@ export function CommandPalette({ open, onClose }: { open: boolean; onClose: () =
               </button>
             </li>
           ))}
-          {results.length === 0 && (
+          {stocks === null && q.trim() !== "" && (
+            <li className="flex items-center gap-2 px-3 py-3 text-sm text-muted" role="status">
+              <span className="skeleton h-4 w-4 rounded-full" aria-hidden /> Loading stocks…
+            </li>
+          )}
+          {results.length === 0 && stocks !== null && (
             <li className="px-3 py-8 text-center text-sm text-muted">
               No match. {q.includes(".") ? "Only stocks in the universe are searchable — an admin can add it on the Stocks page." : "Try a ticker like TCS.NS."}
             </li>

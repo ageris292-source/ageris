@@ -76,12 +76,12 @@ export function WatchStar({
       title={on ? "On your watchlist" : "Add to watchlist"}
       className={cx(
         "inline-flex items-center gap-1.5 rounded-md transition-colors",
-        withLabel ? "h-9 border border-line bg-panel px-3 text-sm font-medium shadow-sm hover:bg-hover" : "p-1 hover:bg-hover",
+        withLabel ? "h-11 w-11 justify-center border border-line bg-panel text-sm font-medium shadow-sm hover:bg-hover sm:h-9 sm:w-auto sm:px-3" : "p-3 hover:bg-hover sm:p-1",
         on ? "text-[#c98500]" : "text-subtle hover:text-ink",
       )}
     >
       <Star size={size} fill={on ? "currentColor" : "none"} aria-hidden />
-      {withLabel && (on ? "Watching" : "Watch")}
+      {withLabel && <span className="hidden sm:inline">{on ? "Watching" : "Watch"}</span>}
     </button>
   );
 }
