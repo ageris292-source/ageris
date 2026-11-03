@@ -54,6 +54,7 @@ import {
   type StockSummary,
 } from "@/lib/api";
 import { ago, inr, pct, signedPct, toneOf, humanize } from "@/lib/format";
+import { plainCheck, sentenceCase } from "@/lib/plain";
 
 function greeting() {
   const h = Number(new Date().toLocaleString("en-IN", { hour: "numeric", hour12: false, timeZone: "Asia/Kolkata" }));
@@ -242,8 +243,8 @@ function ReadinessCard({ risk }: { risk: RiskStatus | null }) {
   const failing = risk.checks.filter((c) => c.status !== "PASS");
   return (
     <Card
-      title="Execution readiness"
-      description="Whether the system would accept an order right now."
+      title="Can I trade right now?"
+      description="Whether Aegis would accept an order at this moment."
       actions={<LinkButton href="/system" size="sm" variant="ghost">Details <ArrowRight size={14} /></LinkButton>}
     >
       <div className="grid grid-cols-2 gap-3">
@@ -281,8 +282,95 @@ function ReadinessCard({ risk }: { risk: RiskStatus | null }) {
   );
 }
 
+function subline(risk: RiskStatus | null, ranking: RankingRun | null | undefined): string {
+  if (risk?.kill_switch.active) return "Trading is paused. Research still works.";
+  if (ranking && ranking.qualified > 0) return `${ranking.qualified} idea${ranking.qualified === 1 ? "" : "s"} passed every safety check today.`;
+  if (ranking) return "No trade today. Every safety check must pass first.";
+  return "Research, test and paper-trade Indian stocks, with 24 safety checks on every trade.";
+}
+
+function topBlocker(r: RankingRun): string | null {
+  const counts = new Map<string, number>();
+  for (const row of r.rows ?? []) if (!row.qualified && row.first_failure) counts.set(row.first_failure, (counts.get(row.first_failure) ?? 0) + 1);
+  const best = [...counts.entries()].sort((a, b) => b[1] - a[1])[0];
+  return best ? plainCheck(best[0]) : null;
+}
+
+/** The one hero per screen (GridNova pattern): what matters right now, in one sentence, with one action. */
+function RightNow({
+  risk,
+  ranking,
+  hasStocks,
+  stocksKnown,
+}: {
+  risk: RiskStatus | null;
+  ranking: RankingRun | null | undefined;
+  hasStocks: boolean;
+  stocksKnown: boolean;
+}) {
+  let tag = "Right now";
+  let headline: string;
+  let detail: string;
+  let cta: { href: string; label: string };
+  if (risk?.kill_switch.active) {
+    tag = "Right now · Trading paused";
+    headline = "The kill switch is on, so no orders can be placed.";
+    detail = "Research and backtests still work. An admin can resume trading on the System page.";
+    cta = { href: "/system", label: "Open System" };
+  } else if (stocksKnown && !hasStocks) {
+    headline = "Add the stocks you want Aegis to watch.";
+    detail = "Pick NSE or BSE companies. Aegis then collects their prices and runs its research agents on them.";
+    cta = { href: "/stocks", label: "Add stocks" };
+  } else if (ranking && ranking.qualified > 0) {
+    headline = `${ranking.qualified} trade idea${ranking.qualified === 1 ? "" : "s"} passed all 24 safety checks.`;
+    detail = `Out of ${ranking.evaluated} stocks checked ${ago(ranking.created_at ?? ranking.as_of)}. Review the evidence before you approve anything.`;
+    cta = { href: "/ranking", label: "Review ideas" };
+  } else if (ranking) {
+    const why = topBlocker(ranking);
+    headline = `No trade today: none of ${ranking.evaluated} stocks passed every check.`;
+    detail = why
+      ? `The most common reason: ${why}. Saying no is the safe answer when the evidence isn't there.`
+      : "Saying no is the safe answer when the evidence isn't there.";
+    cta = { href: "/ranking", label: "See why" };
+  } else if (ranking === null) {
+    headline = "Research any stock while the first daily ranking is prepared.";
+    detail = "Aegis ranks your stocks after each market close. Meanwhile, run an analysis on any stock.";
+    cta = { href: "/stocks", label: "Research a stock" };
+  } else {
+    headline = "Checking today's markets…";
+    detail = "Loading the latest ranking and safety status.";
+    cta = { href: "/stocks", label: "Research a stock" };
+  }
+  return (
+    <section className="hero-card rounded-[24px] p-6 sm:p-8" aria-live="polite">
+      <div className="relative z-10 max-w-2xl">
+        <span className="inline-flex items-center gap-1.5 rounded-full bg-white/12 px-3 py-1 text-xs font-semibold text-[var(--hero-text)] ring-1 ring-white/15">
+          <span className={cx("h-1.5 w-1.5 rounded-full", risk?.kill_switch.active ? "bg-[#ff9a90]" : "bg-[#a4d867]")} aria-hidden />
+          {tag}
+        </span>
+        <h2 className="mt-4 text-[22px] font-bold leading-tight tracking-tight sm:text-[30px]">{headline}</h2>
+        <p className="mt-2 text-[15px] leading-relaxed text-[var(--hero-text-muted)]">{detail}</p>
+        <div className="mt-5 flex flex-wrap gap-2">
+          <Link
+            href={cta.href}
+            className="inline-flex h-11 items-center gap-2 rounded-xl bg-[#f6efe4] px-5 text-sm font-semibold text-[#15302b] shadow-sm transition-transform hover:-translate-y-0.5 active:scale-[0.98]"
+          >
+            {cta.label} <ArrowRight size={16} aria-hidden />
+          </Link>
+          <Link
+            href="/trade"
+            className="inline-flex h-11 items-center gap-2 rounded-xl px-4 text-sm font-semibold text-[var(--hero-text)] ring-1 ring-white/25 hover:bg-white/10"
+          >
+            <ShieldCheck size={16} aria-hidden /> Check a trade
+          </Link>
+        </div>
+      </div>
+    </section>
+  );
+}
+
 export default function Dashboard() {
-  usePageTitle("Dashboard");
+  usePageTitle("Home");
   const { me, guard, isAdmin } = useSession();
   const [risk, setRisk] = useState<RiskStatus | null>(null);
   const [regime, setRegime] = useState<Regime | null | undefined>(undefined);
@@ -325,26 +413,24 @@ export default function Dashboard() {
 
   return (
     <div className="space-y-6">
-      <div className="flex flex-wrap items-end justify-between gap-4">
-        <div>
-          <p className="text-sm text-muted">
-            {new Date().toLocaleDateString("en-IN", { weekday: "long", day: "numeric", month: "long", timeZone: "Asia/Kolkata" })}
-          </p>
-          <h1 className="mt-0.5 text-2xl font-semibold tracking-tight">
-            {greeting()}, <span className="capitalize">{name}</span>
-          </h1>
-        </div>
-        <div className="grid w-full grid-cols-2 gap-2 sm:flex sm:w-auto">
-          <LinkButton href="/stocks" icon={<Search size={15} />}>Research<span className="hidden sm:inline">&nbsp;a stock</span></LinkButton>
-          <LinkButton href="/trade" variant="primary" icon={<ShieldCheck size={15} />}>New trade</LinkButton>
-        </div>
+      <div>
+        <p className="micro-label text-subtle">
+          Home ·{" "}
+          {new Date().toLocaleDateString("en-IN", { weekday: "short", day: "numeric", month: "short", timeZone: "Asia/Kolkata" })}
+        </p>
+        <h1 className="mt-1 text-2xl font-bold tracking-tight sm:text-[28px]">
+          {greeting()}, <span className="capitalize">{name}</span>
+        </h1>
+        <p className="mt-1 text-[15px] text-muted">{subline(risk, ranking)}</p>
       </div>
+
+      <RightNow risk={risk} ranking={ranking} hasStocks={(stocks?.length ?? 0) > 0} stocksKnown={stocks !== null} />
 
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4 lg:gap-4">
         <StatCard
           href="/paper"
           icon={<Wallet size={14} aria-hidden />}
-          label="Paper equity"
+          label="Paper money"
           value={paper === undefined ? <Skeleton className="h-7 w-28" /> : paper ? inr(equity, 0) : "—"}
           sub={
             paper ? (
@@ -357,7 +443,7 @@ export default function Dashboard() {
         <StatCard
           href="/ranking"
           icon={<Trophy size={14} aria-hidden />}
-          label="Qualified today"
+          label="Ideas today"
           value={ranking === undefined ? <Skeleton className="h-7 w-16" /> : ranking ? `${ranking.qualified}` : "—"}
           sub={ranking ? `of ${ranking.evaluated} evaluated · ${ago(ranking.created_at ?? ranking.as_of)}` : ranking === null ? "No ranking run yet" : undefined}
           tone={ranking && ranking.qualified > 0 ? "text-pass" : undefined}
@@ -365,14 +451,14 @@ export default function Dashboard() {
         <StatCard
           href="/system"
           icon={<Gauge size={14} aria-hidden />}
-          label="Market regime"
+          label="Market mood"
           value={regime === undefined ? <Skeleton className="h-7 w-32" /> : regime ? <span className={cx("capitalize", regimeTone)}>{humanize(regime.label).toLowerCase()}</span> : "Unknown"}
           sub={regime ? `Trend ${regime.trend} · volatility ${regime.volatility}` : "Macro series not ingested"}
         />
         <StatCard
           href="/alerts"
           icon={<Bell size={14} aria-hidden />}
-          label="Unread alerts"
+          label="New alerts"
           value={alerts === null ? <Skeleton className="h-7 w-10" /> : alerts.unread}
           sub={alerts?.alerts[0] ? `Latest ${ago(alerts.alerts[0].created_at)}` : "All caught up"}
           tone={alerts && alerts.unread > 0 ? "text-warn" : undefined}
@@ -395,8 +481,8 @@ export default function Dashboard() {
 
         <div className="min-w-0 space-y-6">
           <Card
-            title="Top opportunities"
-            description={ranking ? ranking.headline : "Standardised candidates through the 24 gates."}
+            title="Today's ideas"
+            description={ranking ? sentenceCase(ranking.headline) : "Every stock run through the 24 safety checks."}
             actions={<LinkButton href="/ranking" size="sm" variant="ghost">All <ArrowRight size={14} /></LinkButton>}
           >
             {ranking === undefined && <LoadingRows rows={4} />}
@@ -417,7 +503,7 @@ export default function Dashboard() {
                       <span className="min-w-0 flex-1">
                         <span className="block font-mono text-[13px] font-semibold">{r.ticker}</span>
                         <span className="block truncate text-xs text-muted">
-                          {r.qualified ? `P(profit) ${pct(r.p_profit)} · exp. ${signedPct(r.expected_net_return)}` : `Blocked: ${humanize(r.first_failure ?? "—")}`}
+                          {r.qualified ? `P(profit) ${pct(r.p_profit)} · exp. ${signedPct(r.expected_net_return)}` : `Blocked: ${plainCheck(r.first_failure)}`}
                         </span>
                       </span>
                       {r.qualified ? (

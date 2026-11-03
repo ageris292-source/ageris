@@ -29,7 +29,8 @@ class AgentRun(Base):
     __tablename__ = "agent_runs"
     __table_args__ = (
         CheckConstraint(
-            "status IN ('ok','insufficient_data','data_unusable','failed')", name="ck_agent_status"
+            "status IN ('ok','insufficient_data','data_unusable','failed','not_active')",
+            name="ck_agent_status",
         ),
         Index("ix_agent_runs_stock_asof", "stock_id", "agent", "as_of"),
     )

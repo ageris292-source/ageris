@@ -9,6 +9,7 @@ from datetime import date, datetime
 from fastapi import APIRouter, HTTPException, Response, status
 from pydantic import BaseModel, Field
 from sqlalchemy import func, select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.api.deps import CurrentUser, DbSession
@@ -82,9 +83,20 @@ def ensure_default(db: Session, user_id: uuid.UUID) -> Watchlist:
         .limit(1)
     )
     if first is None:
-        first = Watchlist(user_id=user_id, name=DEFAULT_NAME, position=0)
-        db.add(first)
-        db.flush()
+        # Two first requests can race to create the default list; the loser
+        # re-reads the winner's row instead of failing (unique user+name).
+        try:
+            with db.begin_nested():
+                first = Watchlist(user_id=user_id, name=DEFAULT_NAME, position=0)
+                db.add(first)
+                db.flush()
+        except IntegrityError:
+            first = db.scalar(
+                select(Watchlist).where(
+                    Watchlist.user_id == user_id, Watchlist.name == DEFAULT_NAME
+                )
+            )
+            assert first is not None
     return first
 
 

@@ -58,13 +58,13 @@ export function LoginScreen() {
   }
 
   return (
-    <main className="grid min-h-screen lg:grid-cols-[1.05fr_1fr]">
-      <aside className="relative hidden overflow-hidden bg-[#0b1220] p-12 text-white lg:flex lg:flex-col">
+    <main className="grid min-h-screen gap-3 p-3 lg:grid-cols-[1.05fr_1fr]">
+      <aside className="hero-card relative hidden rounded-[28px] p-12 lg:flex lg:flex-col">
         <div
           className="absolute inset-0 opacity-60"
           style={{
             background:
-              "radial-gradient(900px 500px at 10% 0%, rgba(57,135,229,0.35), transparent 60%), radial-gradient(700px 400px at 90% 100%, rgba(25,158,112,0.22), transparent 60%)",
+              "radial-gradient(900px 500px at 10% 0%, rgba(214,136,72,0.28), transparent 60%), radial-gradient(700px 400px at 90% 100%, rgba(99,208,185,0.22), transparent 60%)",
           }}
           aria-hidden
         />
@@ -96,13 +96,13 @@ export function LoginScreen() {
         <p className="relative mt-12 text-xs text-white/45">Not investment advice. Past results do not predict future results.</p>
       </aside>
 
-      <section className="pt-safe pb-safe flex items-center justify-center px-5 py-12">
-        <div className="w-full max-w-sm">
+      <section className="pt-safe pb-safe flex items-center justify-center px-2 py-12">
+        <div className="glass w-full max-w-sm rounded-[24px] border border-[var(--glass-border)] bg-panel p-6 shadow-[var(--shadow-glass)] sm:p-8">
           <div className="mb-8 flex items-center gap-3 lg:hidden">
             <BrandMark size={32} />
             <span className="text-xl font-semibold">Aegis</span>
           </div>
-          <h2 className="text-2xl font-semibold tracking-tight">Welcome back</h2>
+          <h2 className="text-2xl font-bold tracking-tight">Welcome back</h2>
           <p className="mt-1 text-sm text-muted">Sign in to your research console.</p>
           <form onSubmit={submit} className="mt-8 space-y-4">
             <Field label="Email">
@@ -217,7 +217,7 @@ export function ForcedPasswordScreen() {
   const { me, signOut } = useSession();
   return (
     <main className="flex min-h-screen items-center justify-center px-5 py-12">
-      <div className="w-full max-w-sm">
+      <div className="glass w-full max-w-sm rounded-[24px] border border-[var(--glass-border)] bg-panel p-6 shadow-[var(--shadow-glass)] sm:p-8">
         <div className="mb-6 flex h-11 w-11 items-center justify-center rounded-xl bg-accent-soft text-accent">
           <KeyRound size={20} aria-hidden />
         </div>

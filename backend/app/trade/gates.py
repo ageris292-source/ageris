@@ -25,7 +25,7 @@ from app.trade.costs import CostError, round_trip
 from app.trade.probability import ProbabilityEstimate
 from app.trade.schemas import CostBreakdown, GateResult, TradeProposal, TradeRiskDecision
 
-ENGINE_VERSION = "trade-risk-engine-1.1.0"
+ENGINE_VERSION = "trade-risk-engine-1.2.0"
 
 
 @dataclass
@@ -174,7 +174,20 @@ def _data_licensed(e: _Eval) -> tuple[str, Any, Any, str]:
         return "UNKNOWN", None, True, "No stored prices"
     if not e.c.price_licensed:
         return "FAIL", e.c.price_source, "licensed", "Price source is unlicensed (research only)"
-    return "PASS", e.c.price_source, "licensed", "Licensed price source"
+    if not e.is_exit:
+        # Entries also rest on the model's estimate: every series it read
+        # (stock and benchmark) must be licensed too.
+        pr = _prob(e)
+        if pr is not None and pr.inputs_licensed is None:
+            return "UNKNOWN", e.c.price_source, "licensed", "Model input licences not reported"
+        if pr is not None and not pr.inputs_licensed:
+            return (
+                "FAIL",
+                "model inputs",
+                "licensed",
+                "The model read unlicensed data (e.g. the benchmark): research only",
+            )
+    return "PASS", e.c.price_source, "licensed", "Licensed price source and model inputs"
 
 
 def _data_freshness(e: _Eval) -> tuple[str, Any, Any, str]:

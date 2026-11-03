@@ -15,7 +15,9 @@ from sqlalchemy.orm import Session
 from app.backtest import walkforward as wf
 from app.backtest.data import load_benchmark, load_stock
 from app.backtest.features import FEATURE_VERSION, FEATURES, build_features
+from app.backtest.skill import activation_allowed
 from app.core.config_file import get_config
+from app.macro import service as ms
 from app.models import ModelMonitorRun, ModelVersion, Stock
 from app.trade.probability import ProbabilityEstimate
 
@@ -79,10 +81,23 @@ def monitor_blocked(db: Session, mv: ModelVersion, as_of: datetime) -> bool:
     return bool(as_of - start > limit)
 
 
+# Sessions of benchmark history the features read (beta_120 plus margin).
+BENCHMARK_LOOKBACK_DAYS = 200
+
+
 def predict(
     db: Session, mv: ModelVersion, stock: Stock, as_of: datetime
 ) -> tuple[date, float, float] | None:
     """(feature session, P(profit), P(outperform)) from data known at as_of."""
+    out = predict_with_inputs(db, mv, stock, as_of)
+    return None if out is None else out[:3]
+
+
+def predict_with_inputs(
+    db: Session, mv: ModelVersion, stock: Stock, as_of: datetime
+) -> tuple[date, float, float, bool | None] | None:
+    """As `predict`, plus whether every input series (stock prices and the
+    benchmark over the feature window) is licensed."""
     if mv.feature_version != FEATURE_VERSION or mv.features != FEATURES:
         return None
     models = _models(mv)
@@ -98,7 +113,17 @@ def predict(
         return None
     p_profit = float(models["y_profit"].predict(last)[0])
     p_out = float(models["y_outperform"].predict(last)[0])
-    return last.index[-1].date(), p_profit, p_out
+    session = last.index[-1].date()
+    bench_lic = ms.series_licensed(
+        db,
+        get_config().macro.benchmark,
+        as_of,
+        None,
+        session - timedelta(days=BENCHMARK_LOOKBACK_DAYS),
+    )
+    unknown = s.licensed is None or bench_lic is None
+    licensed = None if unknown else bool(s.licensed and bench_lic)
+    return session, p_profit, p_out, licensed
 
 
 def estimate(
@@ -107,10 +132,14 @@ def estimate(
     mv = active_model(db, horizon, as_of)
     if mv is None or monitor_blocked(db, mv, as_of):
         return None
-    pred = predict(db, mv, stock, as_of)
+    # Defence in depth: however a model became active, it is used only if it
+    # passed validation (or failed only survivorship, with a recorded reason).
+    if not activation_allowed(mv.validation, mv.activation_override):
+        return None
+    pred = predict_with_inputs(db, mv, stock, as_of)
     if pred is None:
         return None
-    session, p_profit, p_out = pred
+    session, p_profit, p_out, inputs_licensed = pred
     expected = wf.lookup_expected(mv.expected_return_map, p_profit)
     if expected is None:
         return None
@@ -124,4 +153,5 @@ def estimate(
         calibrated=True,
         calibration_error=mv.calibration_error,
         oos_periods=mv.oos_periods,
+        inputs_licensed=inputs_licensed,
     )

@@ -97,8 +97,9 @@ def test_weights_renormalise_over_usable_agents() -> None:
         "valuation": _out("valuation", None, status=AgentStatus.FAILED),
     }
     w = RULES.agent_weights
-    expect = (80 * w["technical"] + 40 * w["fundamental"] + 60 * w["risk"] + 50 * w["news"]) / (
-        w["technical"] + w["fundamental"] + w["risk"] + w["news"]
+    assert "risk" in RULES.veto_agents  # risk is a constraint, not part of the average
+    expect = (80 * w["technical"] + 40 * w["fundamental"] + 50 * w["news"]) / (
+        w["technical"] + w["fundamental"] + w["news"]
     )
     s = synthesize(outs, RULES)
     assert s["composite_score"] == pytest.approx(round(expect, 2))
@@ -238,6 +239,14 @@ def test_full_analysis_report(api: tuple[TestClient, dict[str, str]], db: Sessio
     ):
         assert section in md.text
     assert len(client.get("/analysis/TCS.NS/history", headers=h).json()) == 1
+    # replay: re-running every agent at the same point in time reproduces the
+    # report exactly, without recording anything (audit P2-1)
+    n_runs = db.query(AgentRun).count()
+    rp = client.get(f"/reports/{rep['report_id']}/replay", headers=h).json()
+    assert rp["reproduced"] is True, rp["agents"]
+    assert rp["config_changed"] is False and all(a["match"] for a in rp["agents"])
+    assert rp["replay_fingerprint"] == rep["replay_fingerprint"]
+    assert db.query(AgentRun).count() == n_runs
     # immutable
     with pytest.raises(DBAPIError):
         db.execute(text("UPDATE analysis_reports SET stance = 'POSITIVE_TILT'"))
@@ -259,6 +268,7 @@ def test_analysis_with_portfolio_and_errors(
     ).json()
     assert any(a["agent"] == "portfolio" for a in rep["synthesis"]["agents"])
     assert rep["portfolio_fit"]["portfolio_id"] == pid
+    assert client.get(f"/reports/{rep['report_id']}/replay", headers=h).json()["reproduced"]
     assert (
         client.post("/analysis/TCS.NS", headers=h, json={"portfolio_id": 99999}).status_code == 404
     )
@@ -276,3 +286,38 @@ def test_analysis_needs_auth(client: TestClient) -> None:
     assert client.post("/analysis/TCS.NS", json={}).status_code == 401
     for p in ("/analysis/TCS.NS/latest", "/reports/1", "/reports/1/markdown", "/narrator/status"):
         assert client.get(p).status_code == 401
+
+
+# ------------------------------------------------- audit P2-2 / P1-6 --
+
+
+def test_high_risk_vetoes_a_positive_tilt() -> None:
+    """Strong technical and fundamental scores cannot average away high risk."""
+    good = {
+        "technical": _out("technical", 85),
+        "fundamental": _out("fundamental", 80),
+        "valuation": _out("valuation", 75),
+        "macro": _out("macro", 70),
+    }
+    calm = synthesize({**good, "risk": _out("risk", 60)}, RULES)
+    assert calm["stance"] == "POSITIVE_TILT" and calm["vetoes"] == []
+    risky = synthesize({**good, "risk": _out("risk", 20)}, RULES)
+    assert risky["stance"] == "NO_CLEAR_TILT"
+    assert risky["vetoes"][0]["agent"] == "risk"
+    assert risky["composite_score"] == calm["composite_score"]  # risk is not averaged in
+
+
+def test_not_active_agent_has_no_weight_and_costs_no_coverage() -> None:
+    base = {
+        "technical": _out("technical", 70),
+        "fundamental": _out("fundamental", 70),
+        "valuation": _out("valuation", 70),
+        "macro": _out("macro", 70),
+        "risk": _out("risk", 60),
+    }
+    off = synthesize({**base, "news": _out("news", None, status=AgentStatus.NOT_ACTIVE)}, RULES)
+    missing = synthesize({**base, "news": _out("news", None, status=AgentStatus.FAILED)}, RULES)
+    assert off["not_active"] == ["news"]
+    assert off["coverage"] == pytest.approx(1.0)
+    assert missing["coverage"] < 1.0
+    assert next(a for a in off["agents"] if a["agent"] == "news")["weight"] == 0.0

@@ -259,6 +259,8 @@ orchestrator:
   conflict_gap: 25                       # two agents this far apart on either side of 50 conflict
   max_case_points: 6                     # bull / bear points listed per side
   conflict_confidence_penalty: 0.15      # per conflict, multiplicative
+  veto_agents:                           # constraints, not votes: excluded from the composite,
+    risk: 40                             # and a score below this rules out a positive tilt
 
 # Trade Risk Engine (Phase 9). Deterministic gates evaluated in a fixed order;
 # a proposal is APPROVED only if every applicable gate is PASS. UNKNOWN fails.
@@ -351,6 +353,13 @@ backtest:
     subsample: 0.8
     colsample_bytree: 0.8
     reg_lambda: 1.0
+  # A model is activated only if it beats simple baselines out of sample.
+  validation:
+    bootstrap_samples: 300               # moving-block bootstrap resamples for the CIs
+    min_brier_skill_lower: 0.0           # 90% lower bound of Brier skill vs base rate must be > this
+    min_auc_lower: 0.5                   # 90% lower bound of AUC must be > this (better than chance)
+    min_fold_skill_share: 0.6            # share of folds with positive skill
+    min_override_reason_chars: 30        # written reason needed to override survivorship
 
 # Transaction-cost schedules, expressed in basis points of traded value.
 # The example NSE schedule below MUST be checked against the current

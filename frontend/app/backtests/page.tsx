@@ -1,6 +1,6 @@
 "use client";
 
-import { CheckCircle2, ChevronDown, FlaskConical, Play, TriangleAlert, XCircle } from "lucide-react";
+import { CheckCircle2, ChevronDown, CircleHelp, FlaskConical, Play, TriangleAlert, XCircle } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 import {
   CartesianGrid,
@@ -27,7 +27,9 @@ import {
   Callout,
   Card,
   EmptyState,
+  Field,
   LoadingRows,
+  Textarea,
   PageHeader,
   StatCard,
   Table,
@@ -101,6 +103,91 @@ function Calibration({ data }: { data: { mean_predicted: number; observed_rate: 
   );
 }
 
+const CHECK_TEXT: Record<string, string> = {
+  beats_base_rate: "Beats “always guess the average”",
+  ranks_better_than_chance: "Ranks stocks better than chance",
+  stable_across_folds: "Works in most test periods",
+  calibrated: "Probabilities are honest (calibrated)",
+  enough_out_of_sample: "Enough unseen test periods",
+  survivorship: "Test universe includes delisted stocks",
+  skill_measured: "Skill was measured",
+};
+
+/** Plain-language activation checks plus the model vs its baselines. */
+function ModelChecks({ mo }: { mo: ModelRow }) {
+  const [open, setOpen] = useState(false);
+  const v = mo.validation;
+  if (!v) return <p className="mt-2 text-xs text-warn">Not validated against baselines (older model): it can&apos;t be used.</p>;
+  const sk = mo.skill;
+  return (
+    <div className="mt-3">
+      <p className={cx("text-xs font-semibold", v.passed ? "text-pass" : mo.needs_override ? "text-warn" : "text-fail")}>
+        {v.passed ? "Passed every check" : mo.needs_override ? "Real skill; needs a written reason (survivorship)" : "No reliable edge: cannot be activated"}
+      </p>
+      <ul className="mt-1.5 space-y-1 text-xs">
+        {v.checks.map((c) => (
+          <li key={c.name} className="flex gap-1.5" title={c.reason}>
+            {c.status === "PASS" ? (
+              <CheckCircle2 size={13} className="mt-0.5 shrink-0 text-pass" aria-hidden />
+            ) : c.status === "FAIL" ? (
+              <XCircle size={13} className="mt-0.5 shrink-0 text-fail" aria-hidden />
+            ) : (
+              <CircleHelp size={13} className="mt-0.5 shrink-0 text-warn" aria-hidden />
+            )}
+            <span>
+              <span className="sr-only">{c.status}: </span>
+              {CHECK_TEXT[c.name] ?? c.name}
+            </span>
+          </li>
+        ))}
+      </ul>
+      {sk && (
+        <button onClick={() => setOpen((x) => !x)} className="mt-2 text-xs font-semibold text-accent" aria-expanded={open}>
+          {open ? "Hide" : "Show"} model vs baselines
+        </button>
+      )}
+      {sk && open && (
+        <Table className="mt-2">
+          <thead>
+            <tr>
+              <Th>Predictor</Th>
+              <Th align="right">Brier (lower is better)</Th>
+              <Th align="right">AUC</Th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <Td className="font-semibold">This model</Td>
+              <Td align="right" mono>{num(sk.model.brier, 4)}</Td>
+              <Td align="right" mono>{num(sk.model.auc, 3)}</Td>
+            </tr>
+            {(
+              [
+                ["base_rate", "Always the average"],
+                ["momentum", "60-day momentum"],
+                ["logistic", "Simple linear model"],
+              ] as const
+            ).map(([k, label]) => (
+              <tr key={k}>
+                <Td className="text-muted">{label}</Td>
+                <Td align="right" mono>{num(sk.baselines[k].brier, 4)}</Td>
+                <Td align="right" mono>{num(sk.baselines[k].auc, 3)}</Td>
+              </tr>
+            ))}
+          </tbody>
+        </Table>
+      )}
+      {sk && open && sk.ci.brier_skill_vs_base_rate && (
+        <p className="mt-2 text-xs text-muted">
+          Skill vs the average: {signedPct(sk.brier_skill.vs_base_rate)} (90% range {signedPct(sk.ci.brier_skill_vs_base_rate[0])} to{" "}
+          {signedPct(sk.ci.brier_skill_vs_base_rate[1])}). Positive in {pct(sk.fold_skill_share)} of test periods.
+        </p>
+      )}
+      {mo.activation_override && <p className="mt-2 text-xs text-muted">Override reason: “{mo.activation_override}”</p>}
+    </div>
+  );
+}
+
 export default function BacktestsPage() {
   usePageTitle("Backtests & model");
   const { guard, isAdmin } = useSession();
@@ -111,6 +198,7 @@ export default function BacktestsPage() {
   const [busy, setBusy] = useState(false);
   const [confirm, setConfirm] = useState<{ m: ModelRow; action: "activate" | "retire" } | null>(null);
   const [acting, setActing] = useState(false);
+  const [reason, setReason] = useState("");
 
   const load = useCallback(async () => {
     try {
@@ -155,9 +243,10 @@ export default function BacktestsPage() {
     if (!confirm) return;
     setActing(true);
     try {
-      await guard((t) => api.setModel(t, confirm.m.id, confirm.action));
+      await guard((t) => api.setModel(t, confirm.m.id, confirm.action, confirm.m.needs_override ? reason.trim() : undefined));
       toast({ tone: "success", title: `Model ${confirm.action === "activate" ? "activated" : "retired"}` });
       setConfirm(null);
+      setReason("");
       await load();
     } catch (err) {
       toast({ tone: "error", title: "Model not changed", body: err instanceof ApiError ? err.message : undefined });
@@ -173,7 +262,7 @@ export default function BacktestsPage() {
     <div className="space-y-6">
       <PageHeader
         title="Backtests & model"
-        description="Walk-forward LightGBM with purged, embargoed folds and isotonic calibration. Past results do not predict future results."
+        description="Train the AI model on the past and test it on later periods it never saw. It can be switched on only if it beats simple baselines. Past results do not predict future results."
         actions={isAdmin && <Button variant="primary" loading={busy} onClick={run} icon={<Play size={15} />}>{busy ? "Running walk-forward…" : "Run backtest (20-day)"}</Button>}
       />
       {busy && <Callout tone="info" title="Backtest running">Training every fold on point-in-time features can take a few minutes. You can keep using Aegis.</Callout>}
@@ -279,7 +368,7 @@ export default function BacktestsPage() {
               ))}
             </ul>
           </Card>
-          <Card title="Model registry" description="Activating a model lets the risk engine query it; the engine still rejects estimates that fail the calibration or out-of-sample gates.">
+          <Card title="Model registry" description="A model can be switched on only if it beats simple baselines on data it never saw. Even then, the 24 safety checks decide.">
             {models.length === 0 && <p className="text-sm text-muted">No models yet.</p>}
             <ul className="space-y-3">
               {models.map((mo) => (
@@ -300,9 +389,20 @@ export default function BacktestsPage() {
                     <span>AUC {num(mo.auc, 3)}</span>
                     <span>valid from {istDate(mo.valid_from)}</span>
                   </div>
+                  <ModelChecks mo={mo} />
                   {isAdmin && mo.status !== "retired" && (
                     <div className="mt-3 flex gap-2">
-                      {mo.status === "candidate" && <Button size="sm" variant="primary" onClick={() => setConfirm({ m: mo, action: "activate" })}>Activate</Button>}
+                      {mo.status === "candidate" && (
+                        <Button
+                          size="sm"
+                          variant="primary"
+                          disabled={mo.can_activate === false && !mo.needs_override}
+                          title={mo.can_activate === false && !mo.needs_override ? "This model failed validation and can never be activated" : undefined}
+                          onClick={() => setConfirm({ m: mo, action: "activate" })}
+                        >
+                          Activate
+                        </Button>
+                      )}
                       <Button size="sm" onClick={() => setConfirm({ m: mo, action: "retire" })}>Retire</Button>
                     </div>
                   )}
@@ -326,7 +426,16 @@ export default function BacktestsPage() {
             : "The engine stops using it. With no active model for this horizon, probability gates are UNKNOWN and every entry is rejected."
         }
         confirmLabel={confirm?.action === "activate" ? "Activate model" : "Retire model"}
-      />
+      >
+        {confirm?.action === "activate" && confirm.m.needs_override && (
+          <Field
+            label="Why is it acceptable to use this model anyway?"
+            hint="This model shows real skill, but its test universe leaves out delisted stocks, so results look better than reality. Your reason (30+ characters) is saved with the model and in the activity log."
+          >
+            {(id) => <Textarea id={id} value={reason} onChange={(e) => setReason(e.target.value)} rows={3} />}
+          </Field>
+        )}
+      </ConfirmDialog>
     </div>
   );
 }

@@ -173,7 +173,7 @@ export default function MonitoringPage() {
     <div className="space-y-6">
       <PageHeader
         title="Model monitoring"
-        description="Each active model is checked daily for feature drift against its own training data and for calibration decay on its own realised predictions. A FAIL retires it automatically and raises a critical alert."
+        description="Every day Aegis checks that the live AI model still behaves like it did in testing. If the market has drifted or its predictions stop matching reality, the model is switched off automatically and you get an alert."
         actions={<Button variant="primary" loading={busy} onClick={runNow} icon={<Play size={15} />}>{busy ? "Checking…" : "Run monitoring now"}</Button>}
       />
 

@@ -22,6 +22,7 @@ from sklearn.isotonic import IsotonicRegression
 from sklearn.metrics import brier_score_loss, log_loss, roc_auc_score
 
 from app.backtest.features import FEATURES
+from app.backtest.skill import fit_baselines
 from app.core.config_file import BacktestRules
 
 TARGETS = ("y_profit", "y_outperform")
@@ -178,9 +179,14 @@ def walk_forward(data: pd.DataFrame, rules: BacktestRules) -> WalkForwardResult:
         except InsufficientDataError as exc:
             res.skipped_folds.append({**info, "reason": str(exc)})
             continue
-        out = test[["date", "ticker", "fwd_return", "bench_fwd_return", *TARGETS]].copy()
+        out = test[
+            ["date", "ticker", "fwd_return", "bench_fwd_return", "bench_ret_20", *TARGETS]
+        ].copy()
         out["p_profit"] = models["y_profit"].predict(test)
         out["p_outperform"] = models["y_outperform"].predict(test)
+        # Baselines on the same rows, fitted on the same training rows (audit P1-1).
+        for name, prob in fit_baselines(train, test, "y_profit").items():
+            out[f"b_{name}"] = prob
         out["fold"] = k
         preds.append(out)
         info["profit"] = metrics(

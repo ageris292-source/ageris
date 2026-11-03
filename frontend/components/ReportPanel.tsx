@@ -1,7 +1,9 @@
 "use client";
 
-import { CircleHelp, Download, FileText, ShieldAlert, Sparkles, TrendingDown, TrendingUp, TriangleAlert } from "lucide-react";
-import type { AnalysisReport, ReportHistoryRow } from "@/lib/api";
+import { CheckCircle2, CircleHelp, Download, FileText, PowerOff, RotateCcw, ShieldAlert, Sparkles, TrendingDown, TrendingUp, TriangleAlert, XCircle } from "lucide-react";
+import { useState } from "react";
+import { useSession } from "@/components/providers/SessionProvider";
+import { api, type AnalysisReport, type ReplayResult, type ReportHistoryRow } from "@/lib/api";
 import { Badge, Button, Card, EmptyState, SectionLabel, cx } from "@/components/ui/core";
 import { ScoreBar, ScoreRing, StanceBadge } from "@/components/ui/Status";
 import { ago, humanize, istDateTime, num } from "@/lib/format";
@@ -91,6 +93,10 @@ export function ResearchSummary({
                   <span className="truncate text-muted">{agentLabel(a.agent)}</span>
                   {a.status === "ok" ? (
                     <ScoreBar score={a.score} />
+                  ) : a.status === "not_active" ? (
+                    <span className="inline-flex items-center gap-1 text-xs text-subtle" title="Switched off on this server; it carries no weight">
+                      <PowerOff size={12} aria-hidden /> Not active
+                    </span>
                   ) : (
                     <span className="inline-flex items-center gap-1 text-xs text-warn">
                       <CircleHelp size={12} aria-hidden /> {humanize(a.status)}
@@ -99,8 +105,23 @@ export function ResearchSummary({
                 </li>
               ))}
             </ul>
-            <p className="mt-2 text-[11px] text-subtle">50 is neutral. Scores are heuristics, not probabilities.</p>
+            <p className="mt-2 text-[11px] text-subtle">50 is neutral. Scores are heuristics, not probabilities. Risk is a veto, not part of the average.</p>
           </div>
+
+          {(s.vetoes ?? []).length > 0 && (
+            <div className="rounded-2xl bg-warn-soft px-3 py-2.5 text-sm text-warn">
+              {(s.vetoes ?? []).map((v) => (
+                <p key={v.agent} className="flex gap-1.5">
+                  <ShieldAlert size={15} className="mt-0.5 shrink-0" aria-hidden />
+                  <span>
+                    <b>{agentLabel(v.agent)} veto:</b> {v.detail}
+                  </span>
+                </p>
+              ))}
+            </div>
+          )}
+
+          <ReplayCheck reportId={report.report_id} />
 
           {s.insufficient_reasons.length > 0 && (
             <ul className="space-y-1 text-xs text-warn">
@@ -224,5 +245,62 @@ export function ReportHistory({ rows }: { rows: ReportHistoryRow[] | null }) {
         </ul>
       )}
     </Card>
+  );
+}
+
+
+/** Re-runs every agent at the report's original point in time and checks the
+ *  result is identical (nothing is recorded). */
+function ReplayCheck({ reportId }: { reportId: number }) {
+  const { guard } = useSession();
+  const [busy, setBusy] = useState(false);
+  const [res, setRes] = useState<ReplayResult | null>(null);
+  const [err, setErr] = useState<string | null>(null);
+  async function run() {
+    setBusy(true);
+    setErr(null);
+    try {
+      const r = await guard((t) => api.replayReport(t, reportId));
+      if (r) setRes(r);
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : "Replay failed");
+    } finally {
+      setBusy(false);
+    }
+  }
+  return (
+    <div className="rounded-2xl border border-line px-3 py-2.5">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <p className="text-sm">
+          <span className="font-semibold">Reproducible?</span>{" "}
+          <span className="text-muted">Re-run every agent at the same moment and compare.</span>
+        </p>
+        <Button size="sm" variant="ghost" icon={<RotateCcw size={14} />} loading={busy} onClick={run}>
+          Check
+        </Button>
+      </div>
+      {err && <p className="mt-1 text-xs text-fail">{err}</p>}
+      {res && (
+        <div className="mt-2 text-xs">
+          <p className={cx("flex items-center gap-1.5 font-semibold", res.reproduced ? "text-pass" : res.config_changed ? "text-warn" : "text-fail")}>
+            {res.reproduced ? <CheckCircle2 size={14} aria-hidden /> : <XCircle size={14} aria-hidden />}
+            {res.reproduced ? "Reproduced exactly" : "Not identical"}
+            {res.hash_verified ? " · stored copy untampered" : " · stored hash does not verify"}
+          </p>
+          <p className="mt-0.5 text-muted">{res.note}</p>
+          {!res.reproduced && (
+            <ul className="mt-1 space-y-0.5">
+              {res.agents
+                .filter((a) => !a.match)
+                .map((a) => (
+                  <li key={a.agent}>
+                    {agentLabel(a.agent)}: {a.stored.status} {a.stored.score ?? "—"} → {a.replayed.status} {a.replayed.score ?? "—"}
+                  </li>
+                ))}
+            </ul>
+          )}
+        </div>
+      )}
+    </div>
   );
 }

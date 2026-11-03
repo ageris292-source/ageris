@@ -167,8 +167,10 @@ def test_models_unavailable_means_unknown_not_neutral(
     out = client.get(
         "/news-agent/TCS.NS", headers=h, params={"as_of": "2026-09-25T13:00:00+00:00"}
     ).json()
-    assert out["status"] == "insufficient_data" and out["score"] is None
-    assert any("no sentiment" in w for w in out["warnings"])
+    # No sentiment model in this deployment: the agent is honestly switched
+    # off (zero weight), not neutral and not "missing data" (audit P1-6).
+    assert out["status"] == "not_active" and out["score"] is None
+    assert any("switched off" in w for w in out["warnings"])
 
 
 def test_provider_outage(api: tuple[TestClient, dict[str, str]]) -> None:

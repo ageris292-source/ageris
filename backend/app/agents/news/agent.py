@@ -23,6 +23,7 @@ from app.core.config_file import get_config
 from app.market_data import service as md
 from app.market_data.types import Ticker
 from app.models import NewsItem, Stock
+from app.news import nlp
 from app.news import service as ns
 
 log = logging.getLogger(__name__)
@@ -78,10 +79,37 @@ def contradictions(items: list[NewsItem], window_days: int) -> list[str]:
     return out
 
 
+FUTURE_TOLERANCE = timedelta(minutes=10)
+
+
+def _future_dated(item: NewsItem) -> bool:
+    return item.published_at is not None and item.published_at > (
+        item.retrieved_at + FUTURE_TOLERANCE
+    )
+
+
 def run_news(db: Session, stock: Stock, inp: AgentInput) -> AgentOutput:
     cfg = get_config()
     rules = cfg.news
-    items = ns.news_as_of(db, stock, inp.as_of, inp.knowledge_at, rules.lookback_days)
+    if not nlp.sentiment_installed():
+        # Honest off-state: no sentiment model in this deployment (AEGIS_ML=0).
+        # The orchestrator gives NOT_ACTIVE agents zero weight.
+        return not_ok(
+            AGENT,
+            AGENT_VERSION,
+            inp,
+            AgentStatus.NOT_ACTIVE,
+            [
+                "News sentiment is switched off in this deployment "
+                "(the FinBERT model is not installed); it does not affect the research view"
+            ],
+            cfg,
+            SCORE_BASIS,
+        )
+    found = ns.news_as_of(db, stock, inp.as_of, inp.knowledge_at, rules.lookback_days)
+    # A headline dated after Aegis retrieved it has an unreliable timestamp.
+    items = [i for i in found if not _future_dated(i)]
+    bad_dates = len(found) - len(items)
     scored = [i for i in items if i.sentiment_score is not None]
     unscored = len(items) - len(scored)
     if len(scored) < rules.min_items_for_score:
@@ -146,6 +174,8 @@ def run_news(db: Session, stock: Stock, inp: AgentInput) -> AgentOutput:
         warnings.append(f"{unscored} headline(s) excluded: no sentiment available")
     if conflicts:
         warnings.append(f"{len(conflicts)} contradictory news cluster(s) detected")
+    if bad_dates:
+        warnings.append(f"{bad_dates} headline(s) excluded: published after retrieval")
     h = hashlib.sha256("|".join(f"{i.id}:{i.sentiment_score}" for i in scored).encode()).hexdigest()
     return AgentOutput(
         agent=AGENT,
@@ -174,7 +204,9 @@ def run_news(db: Session, stock: Stock, inp: AgentInput) -> AgentOutput:
             / len(scored),
             "contradictions": float(len(conflicts)),
         },
-        data_quality=0.8,
+        # Measured, not assumed: share of in-window headlines with a sentiment
+        # score and a consistent timestamp.
+        data_quality=round(len(scored) / max(1, len(found)), 4),
         data_snapshot_id=h,
         config_fingerprint=cfg.fingerprint(),
         warnings=warnings,

@@ -90,3 +90,8 @@ class ModelVersion(Base):
         UUID(as_uuid=True), ForeignKey("users.id")
     )
     activated_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    # Skill against baselines and the activation checks (audit P1). A model
+    # without a passing validation is never used by the trade engine.
+    skill: Mapped[dict[str, Any] | None] = mapped_column(JSONB)
+    validation: Mapped[dict[str, Any] | None] = mapped_column(JSONB)
+    activation_override: Mapped[str | None] = mapped_column(Text)

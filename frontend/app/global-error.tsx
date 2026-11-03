@@ -9,7 +9,7 @@ export default function GlobalError({ reset }: { error: Error & { digest?: strin
         <main style={{ minHeight: "100vh", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", padding: 24, textAlign: "center" }}>
           <h1 style={{ fontSize: 22, margin: 0 }}>Aegis hit an unexpected error</h1>
           <p style={{ color: "#a8a69f", maxWidth: 420, fontSize: 14 }}>Nothing was traded and your data is safe. Reload to continue.</p>
-          <button onClick={reset} style={{ marginTop: 12, height: 44, padding: "0 20px", borderRadius: 8, border: 0, background: "#3987e5", color: "#fff", fontSize: 14, cursor: "pointer" }}>
+          <button onClick={reset} style={{ marginTop: 12, height: 44, padding: "0 20px", borderRadius: 8, border: 0, background: "#0d6b5f", color: "#fff", fontSize: 14, cursor: "pointer" }}>
             Reload
           </button>
         </main>

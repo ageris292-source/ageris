@@ -13,7 +13,7 @@ type Size = "sm" | "md" | "lg";
 
 const VARIANT: Record<Variant, string> = {
   primary: "bg-accent text-on-accent hover:bg-accent-strong shadow-sm",
-  secondary: "border border-line bg-panel text-ink hover:bg-hover shadow-sm",
+  secondary: "glass border border-[var(--glass-border)] bg-panel text-ink hover:bg-hover shadow-sm",
   ghost: "text-muted hover:bg-hover hover:text-ink",
   danger: "bg-fail text-white hover:opacity-90 shadow-sm",
   success: "bg-pass text-white hover:opacity-90 shadow-sm",
@@ -39,7 +39,7 @@ export const Button = forwardRef<HTMLButtonElement, ButtonProps>(function Button
     <button
       ref={ref}
       className={cx(
-        "inline-flex shrink-0 items-center justify-center whitespace-nowrap rounded-md font-medium transition-colors disabled:pointer-events-none disabled:opacity-45",
+        "inline-flex shrink-0 items-center justify-center whitespace-nowrap rounded-xl font-semibold transition-[background-color,transform,box-shadow] duration-150 active:scale-[0.98] disabled:pointer-events-none disabled:opacity-45",
         VARIANT[variant],
         SIZE[size],
         className,
@@ -73,7 +73,7 @@ export function LinkButton({
     <Link
       href={href}
       className={cx(
-        "inline-flex shrink-0 items-center justify-center whitespace-nowrap rounded-md font-medium transition-colors",
+        "inline-flex shrink-0 items-center justify-center whitespace-nowrap rounded-xl font-semibold transition-[background-color,transform] duration-150 active:scale-[0.98]",
         VARIANT[variant],
         SIZE[size],
         className,
@@ -96,7 +96,7 @@ export function IconButton({
       aria-label={label}
       title={label}
       className={cx(
-        "inline-flex h-11 w-11 items-center justify-center rounded-md text-muted transition-colors hover:bg-hover hover:text-ink active:bg-hover disabled:opacity-40 sm:h-9 sm:w-9",
+        "inline-flex h-11 w-11 items-center justify-center rounded-xl text-muted transition-colors hover:bg-hover hover:text-ink active:bg-hover disabled:opacity-40 sm:h-9 sm:w-9",
         className,
       )}
       {...rest}
@@ -126,12 +126,12 @@ export function Card({
   id?: string;
 }) {
   return (
-    <section id={id} className={cx("min-w-0 rounded-xl border border-line bg-panel shadow-[var(--shadow-card)]", className)}>
+    <section id={id} className={cx("glass min-w-0 rounded-[18px] border border-[var(--glass-border)] bg-panel shadow-[var(--shadow-card)]", className)}>
       {(title || actions) && (
         <header className="flex flex-wrap items-start justify-between gap-x-4 gap-y-3 px-4 pt-4 sm:px-5">
           <div className="min-w-[12rem] flex-1">
-            {title && <h2 className="text-sm font-semibold text-ink">{title}</h2>}
-            {description && <p className="mt-0.5 text-xs text-muted">{description}</p>}
+            {title && <h2 className="text-[15px] font-semibold leading-snug text-ink">{title}</h2>}
+            {description && <p className="mt-0.5 text-[13px] text-muted">{description}</p>}
           </div>
           {actions && <div className="flex flex-wrap items-center gap-2">{actions}</div>}
         </header>
@@ -199,11 +199,11 @@ export function PageHeader({
 }) {
   return (
     <div className="mb-6">
-      {eyebrow && <div className="mb-2 text-xs text-muted">{eyebrow}</div>}
+      {eyebrow && <div className="micro-label mb-2 text-subtle">{eyebrow}</div>}
       <div className="flex flex-wrap items-end justify-between gap-4">
         <div className="min-w-0">
-          <h1 className="text-[22px] font-semibold tracking-tight sm:text-2xl">{title}</h1>
-          {description && <p className="mt-1 max-w-3xl text-sm text-muted">{description}</p>}
+          <h1 className="text-2xl font-bold tracking-tight sm:text-[28px]">{title}</h1>
+          {description && <p className="mt-1.5 max-w-3xl text-[15px] leading-relaxed text-muted">{description}</p>}
         </div>
         {actions && <div className="flex w-full flex-wrap items-center gap-2 sm:w-auto [&>*]:flex-1 sm:[&>*]:flex-none">{actions}</div>}
       </div>
@@ -229,11 +229,11 @@ export function Stat({
 }) {
   return (
     <div className={cx("min-w-0", className)}>
-      <div className="flex items-center gap-1.5 text-xs font-medium text-muted">
-        {icon}
-        {label}
+      <div className="flex items-center gap-2 text-muted">
+        {icon && <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-accent-soft text-accent">{icon}</span>}
+        <span className="micro-label truncate">{label}</span>
       </div>
-      <div className={cx("mt-1 break-words text-xl font-semibold leading-tight tracking-tight sm:text-2xl", tone)}>{value}</div>
+      <div className={cx("mt-2 break-words text-xl font-bold leading-tight tracking-tight tabular-nums sm:text-2xl", tone)}>{value}</div>
       {sub && <div className="mt-0.5 text-xs text-muted">{sub}</div>}
     </div>
   );
@@ -241,12 +241,12 @@ export function Stat({
 
 export function StatCard(props: React.ComponentProps<typeof Stat> & { href?: string }) {
   const inner = (
-    <div className="h-full rounded-xl border border-line bg-panel p-3.5 shadow-[var(--shadow-card)] transition-colors sm:p-4">
+    <div className="glass h-full rounded-[18px] border border-[var(--glass-border)] bg-panel p-4 shadow-[var(--shadow-card)] transition-[transform,border-color] duration-200">
       <Stat {...props} />
     </div>
   );
   return props.href ? (
-    <Link href={props.href} className="block rounded-xl hover:[&>div]:border-line-strong">
+    <Link href={props.href} className="block rounded-[18px] hover:[&>div]:-translate-y-0.5 hover:[&>div]:border-line-strong motion-reduce:hover:[&>div]:translate-y-0">
       {inner}
     </Link>
   ) : (
@@ -315,7 +315,7 @@ export function Callout({
     neutral: "border-line",
   };
   return (
-    <div className={cx("flex gap-3 rounded-lg border px-4 py-3 text-sm", TONE[tone], border[tone], className)}>
+    <div className={cx("flex gap-3 rounded-2xl border px-4 py-3 text-sm", TONE[tone], border[tone], className)}>
       {icon && <span className="mt-0.5 shrink-0">{icon}</span>}
       <div className="min-w-0 flex-1">
         {title && <p className="font-medium">{title}</p>}
@@ -341,7 +341,7 @@ export function Segmented<T extends string>({
   size?: "sm" | "md";
 }) {
   return (
-    <div role="group" aria-label={label} className="inline-flex max-w-full overflow-x-auto rounded-lg bg-sunken p-0.5 [scrollbar-width:none]">
+    <div role="group" aria-label={label} className="inline-flex max-w-full overflow-x-auto rounded-xl bg-sunken p-1 [scrollbar-width:none]">
       {options.map((o) => (
         <button
           key={o.value}
@@ -350,7 +350,7 @@ export function Segmented<T extends string>({
           aria-pressed={o.value === value}
           onClick={() => onChange(o.value)}
           className={cx(
-            "shrink-0 whitespace-nowrap rounded-md font-medium transition-colors",
+            "shrink-0 whitespace-nowrap rounded-lg font-semibold transition-colors",
             size === "sm" ? "px-3 py-2.5 text-xs sm:px-2.5 sm:py-1" : "px-3.5 py-2.5 text-sm sm:px-3 sm:py-1.5",
             o.value === value ? "bg-panel text-ink shadow-sm" : "text-muted hover:text-ink",
           )}
@@ -401,7 +401,7 @@ export function Tabs<T extends string>({
 /* ------------------------------------------------------------------ Forms */
 
 const control =
-  "w-full rounded-md border border-line bg-panel px-3 text-base text-ink sm:text-sm placeholder:text-subtle transition-colors focus:border-accent focus:outline-none focus:ring-2 focus:ring-accent/20 disabled:opacity-50";
+  "w-full rounded-xl border border-line bg-[var(--elevated)]/70 px-3 text-base text-ink sm:text-sm placeholder:text-subtle transition-colors focus:border-accent focus:outline-none focus:ring-2 focus:ring-accent/20 disabled:opacity-50";
 
 export const Input = forwardRef<HTMLInputElement, React.InputHTMLAttributes<HTMLInputElement>>(function Input(
   { className, ...rest },

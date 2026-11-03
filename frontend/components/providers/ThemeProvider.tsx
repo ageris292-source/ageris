@@ -70,6 +70,6 @@ export const useTheme = () => useContext(Ctx);
 export function useChartColors() {
   const { resolved } = useTheme();
   return resolved === "dark"
-    ? { s1: "#3987e5", s2: "#d95926", s3: "#199e70", grid: "#2c2c2a", axis: "#898781", surface: "#1a1a19", muted: "#939189", pass: "#0ca30c", fail: "#d03b3b" }
-    : { s1: "#2a78d6", s2: "#eb6834", s3: "#1baf7a", grid: "#e1e0d9", axis: "#898781", surface: "#ffffff", muted: "#7a7873", pass: "#0ca30c", fail: "#d03b3b" };
+    ? { s1: "#1f9c84", s2: "#c98020", s3: "#4f80d0", grid: "rgba(255,255,255,0.08)", axis: "#8a867d", surface: "#1b201e", muted: "#918d84", pass: "#a4d867", fail: "#ff7a6e" }
+    : { s1: "#008a76", s2: "#b35f00", s3: "#3a6fd0", grid: "rgba(70,58,40,0.12)", axis: "#7a7468", surface: "#efece5", muted: "#655f54", pass: "#3b7414", fail: "#b3261e" };
 }

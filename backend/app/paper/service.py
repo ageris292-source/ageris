@@ -103,6 +103,11 @@ def place_order(
     proposal = TradeProposal(
         **{**prop.payload, "rationale": f"pre-order re-check of decision #{decision_id}"}
     )
+    # Serialise orders per portfolio (no double spend, no double fill and no
+    # limit breach under concurrency): take the lock BEFORE the full re-check,
+    # so the re-check sees every order committed ahead of this one.
+    pf = db.scalar(select(Portfolio).where(Portfolio.id == prop.portfolio_id).with_for_update())
+    assert pf is not None
     re, _, re_id = ts.submit(db, proposal, approver.id, now)
     order = PaperOrder(
         idempotency_key=idempotency_key,
@@ -118,10 +123,6 @@ def place_order(
         limit_price=prop.entry_price,
         status="REJECTED",
     )
-    # Serialise orders per portfolio (no double spend / double fill under
-    # concurrency): lock, then re-check that the decision is still unused.
-    pf = db.scalar(select(Portfolio).where(Portfolio.id == prop.portfolio_id).with_for_update())
-    assert pf is not None
     used = db.scalar(
         select(PaperOrder).where(
             PaperOrder.decision_id == decision_id, PaperOrder.status == "FILLED"
@@ -146,7 +147,10 @@ def place_order(
         ref,
         cfg.transaction_costs[name],
         ctx.get("adtv"),
-        proposal.quoted_spread_bps,
+        proposal.quoted_spread_bps
+        if proposal.quoted_spread_bps is not None or prop.side == "buy"
+        # exits without a quote fill at the assumed worst spread, as costed
+        else float(cfg.liquidity.maximum_spread_bps),
     )
     limit = prop.entry_price
     if (prop.side == "buy" and fill.fill_price > limit) or (

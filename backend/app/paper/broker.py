@@ -36,7 +36,8 @@ def simulate_fill(
 ) -> Fill:
     notional_ref = float(reference) * quantity
     impact = s.market_impact_bps_per_pct_adv * (notional_ref / adtv * 100) if adtv else 0.0
-    half = spread_bps / 2 if spread_bps is not None else s.half_spread_bps
+    # A supplied spread is untrusted: it can only make the fill worse.
+    half = max(spread_bps / 2, s.half_spread_bps) if spread_bps is not None else s.half_spread_bps
     adverse = s.slippage_bps + half + impact
     factor = Decimal(str(1 + adverse / 1e4)) if side == "buy" else Decimal(str(1 - adverse / 1e4))
     price = (reference * factor).quantize(TICK, ROUND_HALF_UP)

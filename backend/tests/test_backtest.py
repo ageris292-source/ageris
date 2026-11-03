@@ -163,18 +163,41 @@ def test_simulation_hand_worked() -> None:
     assert s["summary"]["no_trade_periods"] == 1 and s["summary"]["trades"] == 1
     assert s["summary"]["total_return"] == pytest.approx(0.045)
     assert s["summary"]["benchmark_total_return"] == pytest.approx(1.01 * 1.02 - 1)
+    assert s["summary"]["average_turnover"] == pytest.approx(0.25)  # A in, then A out
+    assert s["summary"]["profit_factor"] is None  # no losing trade
+    assert s["summary"]["sortino"] is None  # no downside periods
 
 
 # ----------------------------------------------------------- end to end --
 
 CAL = get_calendar()
+REASON = "Research only: universe lacks delisted names; accepted for paper testing."
 LAST = CAL.latest_completed_session(NOW, timedelta(minutes=60))
 DAYS = CAL.sessions(LAST - timedelta(days=1500), LAST)[-900:]
 
 
-def _seed(db: Session, n_stocks: int = 3) -> None:
+SKILL_TICKERS = ["TCS.NS", "INFY.NS", "WIPRO.NS", "HCLTECH.NS", "TECHM.NS", "LTIM.NS"]
+# Longer history with a real, learnable pattern: each stock follows persistent
+# trends that flip at random, so past returns genuinely predict future ones.
+SKILL_DAYS = CAL.sessions(LAST - timedelta(days=2200), LAST)[-1300:]
+
+
+def _trend_returns(rng: np.random.Generator, n: int, market: np.ndarray) -> np.ndarray:
+    drift = np.empty(n)
+    d = 0.003
+    for t in range(n):
+        if rng.random() < 1 / 120:
+            d = -d
+        drift[t] = d
+    return drift + 0.9 * market + rng.normal(0, 0.008, n)
+
+
+def _seed(db: Session, n_stocks: int = 3, skill: bool = False) -> None:
+    """Seed the benchmark and stocks. skill=False: pure noise (no model can
+    have an edge). skill=True: trending stocks a model can learn."""
+    days = SKILL_DAYS if skill else DAYS
     rng = np.random.default_rng(11)
-    m = rng.normal(0.0003, 0.009, len(DAYS))
+    m = rng.normal(0.0003, 0.009, len(days))
     levels = 20000 * np.cumprod(1 + m)
     ms.store(
         db,
@@ -191,13 +214,16 @@ def _seed(db: Session, n_stocks: int = 3) -> None:
                 CAL.session_close_utc(d) + timedelta(hours=1),
                 False,
             )
-            for d, v in zip(DAYS, levels, strict=True)
+            for d, v in zip(days, levels, strict=True)
         ],
         retrieved_at=datetime(2020, 1, 1, tzinfo=UTC),
     )
-    for k, t in enumerate(["TCS.NS", "INFY.NS", "WIPRO.NS"][:n_stocks]):
+    for k, t in enumerate(SKILL_TICKERS[: 6 if skill else n_stocks]):
         stock = md.add_stock(db, Ticker.parse(t), None)
-        closes = 1000 * np.cumprod(1 + 0.9 * m + rng.normal(0, 0.01, len(DAYS)))
+        rets = (
+            _trend_returns(rng, len(days), m) if skill else 0.9 * m + rng.normal(0, 0.01, len(days))
+        )
+        closes = 1000 * np.cumprod(1 + rets)
         bars = [
             Bar(
                 session=s,
@@ -207,7 +233,7 @@ def _seed(db: Session, n_stocks: int = 3) -> None:
                 close=Decimal(f"{c:.2f}"),
                 volume=3_000_000 + k,
             )
-            for s, c in zip(DAYS, closes, strict=True)
+            for s, c in zip(days, closes, strict=True)
         ]
         batch = ProviderBatch(
             ticker=Ticker.parse(t),
@@ -217,7 +243,7 @@ def _seed(db: Session, n_stocks: int = 3) -> None:
             retrieved_at=NOW - timedelta(minutes=5),
             bars=bars,
         )
-        md.ingest_batch(db, stock, batch, requested=(DAYS[0], DAYS[-1]), now=NOW)
+        md.ingest_batch(db, stock, batch, requested=(days[0], days[-1]), now=NOW)
     db.commit()
 
 
@@ -229,11 +255,28 @@ def api(client: TestClient, admin: User) -> Iterator[tuple[TestClient, dict[str,
     app.dependency_overrides.clear()
 
 
+@pytest.fixture
+def lenient_calibration(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Small synthetic markets give noisy calibration (ECE ~0.05-0.10 even
+    for a model with real skill). To exercise the activation path, these
+    tests allow ECE up to 0.12; production keeps the configured 0.05."""
+    from app.backtest import service as bsvc
+
+    cfg = get_config()
+    loose = cfg.model_copy(
+        update={
+            "trade_gates": cfg.trade_gates.model_copy(update={"maximum_calibration_error": 0.12})
+        }
+    )
+    monkeypatch.setattr(bsvc, "get_config", lambda: loose)
+
+
+@pytest.mark.usefixtures("lenient_calibration")
 def test_backtest_run_is_reproducible_and_registers_a_model(
     api: tuple[TestClient, dict[str, str]], db: Session, analyst: User
 ) -> None:
     client, h = api
-    _seed(db)
+    _seed(db, skill=True)
     assert (
         client.post("/backtests", headers=auth_header(client, analyst.email), json={}).status_code
         == 403
@@ -271,8 +314,23 @@ def test_backtest_run_is_reproducible_and_registers_a_model(
         ).status_code
         == 403
     )
-    act = client.post(f"/models/{mid}/activate", headers=h).json()
-    assert act["status"] == "active"
+    # It shows real skill but the universe has survivorship bias: activation
+    # needs a written reason, which is recorded (audit P1-2).
+    m0 = next(m for m in models if m["id"] == mid)
+    assert m0["validation"]["failed"] == ["survivorship"], m0["validation"]["failed"]
+    assert m0["needs_override"] is True and m0["can_activate"] is False
+    assert m0["skill"]["ci"]["brier_skill_vs_base_rate"][0] > 0
+    assert client.post(f"/models/{mid}/activate", headers=h).status_code == 422
+    assert (
+        client.post(
+            f"/models/{mid}/activate", headers=h, json={"override_reason": "too short"}
+        ).status_code
+        == 422
+    )
+    act = client.post(f"/models/{mid}/activate", headers=h, json={"override_reason": REASON})
+    assert act.status_code == 200, act.text
+    act = act.json()
+    assert act["status"] == "active" and act["activation_override"] == REASON
     est = client.get("/models/estimate/TCS.NS", headers=h).json()
     assert est["available"] is True and 0 <= est["p_profit"] <= 1
     assert est["oos_periods"] == a["metrics"]["folds_trained"]
@@ -286,20 +344,21 @@ def test_backtest_run_is_reproducible_and_registers_a_model(
     )
     # activating the other model retires this one
     other = models[0]["id"]
-    client.post(f"/models/{other}/activate", headers=h)
+    client.post(f"/models/{other}/activate", headers=h, json={"override_reason": REASON})
     status = {m["id"]: m["status"] for m in client.get("/models", headers=h).json()}
     assert status == {other: "active", mid: "retired"}
     assert client.post(f"/models/{mid}/activate", headers=h).status_code == 409
 
 
+@pytest.mark.usefixtures("lenient_calibration")
 def test_trade_engine_uses_the_active_model(
     api: tuple[TestClient, dict[str, str]], db: Session
 ) -> None:
     client, h = api
-    _seed(db)
+    _seed(db, skill=True)
     run = client.post("/backtests", headers=h, json={"horizon": 20}).json()
     mid = client.get("/models", headers=h).json()[0]["id"]
-    client.post(f"/models/{mid}/activate", headers=h)
+    client.post(f"/models/{mid}/activate", headers=h, json={"override_reason": REASON})
     pid = client.post(
         "/portfolios", headers=h, json={"name": "Paper", "kind": "paper", "cash": "1000000"}
     ).json()["id"]
@@ -315,6 +374,7 @@ def test_trade_engine_uses_the_active_model(
     )
     ctx, _ = trade_context.build(db, p, NOW)
     assert ctx.probability is not None and ctx.probability.model_id.endswith(f"run{run['id']}")
+    assert ctx.probability.inputs_licensed is True  # licensed stock and benchmark
     wrong_h, _ = trade_context.build(db, p.model_copy(update={"horizon_days": 10}), NOW)
     assert wrong_h.probability is None  # no model for that horizon -> UNKNOWN at the gates
     # a tampered artifact is refused
@@ -347,3 +407,82 @@ def test_universe_counts_each_company_once(db: Session) -> None:
         md.add_stock(db, Ticker.parse(t), None)
     got = [(s.symbol, s.exchange) for s in universe(db, None)]
     assert got == [("INFY", "NSE"), ("TCS", "BSE")]
+
+
+def test_benchmark_licence_is_reported_per_window(db: Session) -> None:
+    """An unlicensed benchmark observation inside the window makes the model's
+    inputs unlicensed; licensed rows win when both versions exist (audit P0-4)."""
+    _seed(db, n_stocks=1)
+    start = DAYS[-30]
+    assert ms.series_licensed(db, "nifty50", NOW, None, start) is True
+    extra = DAYS[-1] + timedelta(days=1)
+    while not CAL.is_session(extra):
+        extra += timedelta(days=1)
+    ms.store(
+        db,
+        [
+            Obs(
+                "nifty50",
+                "daily",
+                extra,
+                20000.0,
+                "points",
+                "yahoo",
+                False,
+                None,
+                CAL.session_close_utc(extra) + timedelta(hours=1),
+                False,
+            )
+        ],
+        retrieved_at=CAL.session_close_utc(extra) + timedelta(hours=1),
+    )
+    db.commit()
+    later = CAL.session_close_utc(extra) + timedelta(hours=2)
+    assert ms.series_licensed(db, "nifty50", later, None, start) is False
+    assert ms.series_licensed(db, "nifty50", NOW, None, start) is True  # point in time
+    assert ms.series_licensed(db, "nifty50", NOW, None, extra + timedelta(days=400)) is None
+
+
+def test_a_model_without_skill_can_never_be_used(
+    api: tuple[TestClient, dict[str, str]], db: Session
+) -> None:
+    """Pure-noise market: the model may look calibrated but has no edge over
+    the base rate. It is refused at activation, even with an override reason,
+    and the engine ignores it even if forced active (audit P1-1/P1-2)."""
+    from app.backtest.service import set_status
+
+    client, h = api
+    _seed(db)
+    client.post("/backtests", headers=h, json={"horizon": 20})
+    m = client.get("/models", headers=h).json()[0]
+    v = m["validation"]
+    assert v["passed"] is False and "beats_base_rate" in v["failed"]
+    assert m["can_activate"] is False and m["needs_override"] is False
+    r = client.post(f"/models/{m['id']}/activate", headers=h, json={"override_reason": REASON})
+    assert r.status_code == 409 and "failed validation" in r.json()["detail"]
+    mv = db.get(ModelVersion, m["id"])
+    assert mv is not None
+    set_status(db, mv, "active", None)  # bypass the API on purpose
+    assert client.get("/models/estimate/TCS.NS", headers=h).json()["available"] is False
+
+
+def test_skill_scores_hand_checked() -> None:
+    from app.backtest.skill import brier_skill, validate
+
+    y = np.array([0, 1, 1, 0, 1, 0, 1, 1])
+    base = np.full(len(y), y.mean())
+    assert brier_skill(base, base, y) == pytest.approx(0.0)
+    perfect = y.astype(float)
+    assert brier_skill(perfect, base, y) == pytest.approx(1.0)
+    v = validate(
+        None,
+        calibration_error=0.01,
+        max_calibration_error=0.05,
+        oos_periods=6,
+        min_oos_periods=4,
+        survivorship_bias="LOW",
+        min_brier_skill_lower=0.0,
+        min_auc_lower=0.5,
+        min_fold_skill_share=0.6,
+    )
+    assert v["passed"] is False and v["failed"] == ["skill_measured"]

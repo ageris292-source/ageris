@@ -28,6 +28,7 @@ import {
   Th,
   cx,
 } from "@/components/ui/core";
+import { plainCheck } from "@/lib/plain";
 import { api, type Counterfactuals, type RankingRow, type RankingRun } from "@/lib/api";
 import { ago, inr, istDateTime, num, pct, signedPct, toneOf } from "@/lib/format";
 
@@ -110,7 +111,7 @@ export default function RankingPage() {
     <div className="space-y-6">
       <PageHeader
         title="Opportunities"
-        description="Each stock gets the same standardised candidate trade (entry at the last close, stop from ATR, fixed reward multiple), evaluated by the 24-gate engine. Qualifying is not an order."
+        description="Every day each stock gets the same sample trade and goes through all 24 safety checks. Only stocks that pass every check appear as ideas. An idea is not an order: you still decide."
         actions={isAdmin && <Button variant="primary" loading={busy} onClick={runNow} icon={<Play size={15} />}>{busy ? "Ranking…" : "Run ranking now"}</Button>}
       />
 
@@ -193,7 +194,7 @@ export default function RankingPage() {
                         <div><p className="text-subtle">P(profit)</p><p className="font-mono">{pct(r.p_profit)}</p></div>
                         <div><p className="text-subtle">R:R</p><p className="font-mono">{r.reward_risk == null ? "—" : num(r.reward_risk, 2)}</p></div>
                       </div>
-                      {!r.qualified && r.first_failure && <p className="mt-2 font-mono text-[11px] text-muted">first blocking gate: {r.first_failure}</p>}
+                      {!r.qualified && r.first_failure && <p className="mt-2 text-xs text-muted">Stopped by: {plainCheck(r.first_failure)}</p>}
                     </Link>
                     {r.qualified && (
                       <LinkButton href={tradeLink(r)} size="sm" variant="primary" icon={<ShieldCheck size={13} />} className="mt-3 w-full">Propose this trade</LinkButton>
@@ -230,7 +231,7 @@ export default function RankingPage() {
                         ) : (
                           <span title={r.failures.join("\n")}>
                             <Badge tone="neutral" icon={<XCircle size={12} aria-hidden />}>Blocked</Badge>
-                            <span className="mt-1 block font-mono text-[11px] text-muted">{r.first_failure}</span>
+                            <span className="mt-1 block text-xs text-muted">{plainCheck(r.first_failure)}</span>
                           </span>
                         )}
                       </Td>

@@ -262,3 +262,15 @@ def test_paper_endpoints_need_auth(client: TestClient) -> None:
     assert client.get("/paper/orders").status_code == 401
     assert client.get("/paper/portfolios/1").status_code == 401
     assert client.post("/paper/monitor").status_code == 401
+
+
+def test_a_claimed_tight_spread_never_improves_the_simulated_fill() -> None:
+    from app.paper.broker import simulate_fill
+
+    s = get_config().transaction_costs["NSE_EQ_DELIVERY"]
+    ref = Decimal("1000.00")
+    base = simulate_fill("buy", 10, ref, s, 1e9, None)
+    for claimed in (0.0, 1.0):
+        assert simulate_fill("buy", 10, ref, s, 1e9, claimed).fill_price >= base.fill_price
+    wide = simulate_fill("buy", 10, ref, s, 1e9, 50.0)
+    assert wide.fill_price > base.fill_price  # a wider real spread still costs more

@@ -45,7 +45,14 @@ class Point:
 
 def synthesize(outputs: dict[str, AgentOutput], rules: OrchestratorRules) -> dict[str, Any]:
     ok = {a: o for a, o in outputs.items() if o.status is AgentStatus.OK and o.score is not None}
-    w = {a: rules.agent_weights.get(a, 0.0) for a in outputs}
+    # An agent switched off in this deployment carries no weight at all: it is
+    # neither a vote nor missing coverage.
+    w = {
+        a: 0.0 if o.status is AgentStatus.NOT_ACTIVE else rules.agent_weights.get(a, 0.0)
+        for a, o in outputs.items()
+    }
+    vetoes = rules.veto_agents
+    voters = {a: o for a, o in ok.items() if a not in vetoes}
 
     table = [
         {
@@ -63,9 +70,22 @@ def synthesize(outputs: dict[str, AgentOutput], rules: OrchestratorRules) -> dic
     ]
 
     wsum = sum(w[a] for a in ok)
-    composite = round(sum(w[a] * (ok[a].score or 0) for a in ok) / wsum, 2) if wsum else None
+    vsum = sum(w[a] for a in voters)
+    composite = (
+        round(sum(w[a] * (voters[a].score or 0) for a in voters) / vsum, 2) if vsum else None
+    )
     total_w = sum(w.values())
     coverage = wsum / total_w if total_w else 0.0
+    veto_hits = [
+        {
+            "agent": a,
+            "score": ok[a].score,
+            "threshold": t,
+            "detail": f"{a} score {ok[a].score:.0f} is below {t:g}: a positive tilt is ruled out",
+        }
+        for a, t in vetoes.items()
+        if a in ok and (ok[a].score or 0) < t
+    ]
 
     missing_required = [a for a in rules.required_agents if a not in ok]
     reasons: list[str] = []
@@ -79,6 +99,8 @@ def synthesize(outputs: dict[str, AgentOutput], rules: OrchestratorRules) -> dic
     stance: Stance
     if reasons or composite is None:
         stance = "INSUFFICIENT_DATA"
+    elif composite >= 50 + rules.stance_band and veto_hits:
+        stance = "NO_CLEAR_TILT"
     elif composite >= 50 + rules.stance_band:
         stance = "POSITIVE_TILT"
     elif composite <= 50 - rules.stance_band:
@@ -148,8 +170,11 @@ def synthesize(outputs: dict[str, AgentOutput], rules: OrchestratorRules) -> dic
         "composite_score": composite,
         "composite_basis": (
             "Weighted mean of usable agent scores (weights renormalised over agents with a "
-            "result); 50 = no tilt. Descriptive, not a probability or expected return."
+            "result; constraint agents such as risk act as a veto instead of a vote); "
+            "50 = no tilt. Descriptive, not a probability or expected return."
         ),
+        "vetoes": veto_hits,
+        "not_active": [a for a, o in outputs.items() if o.status is AgentStatus.NOT_ACTIVE],
         "confidence": confidence,
         "confidence_basis": (
             "heuristic_uncalibrated (agent confidence x coverage x conflict penalty)"

@@ -18,6 +18,7 @@ from app.backtest import walkforward as wf
 from app.backtest.data import build_dataset, data_hash, load_benchmark, load_stock, universe
 from app.backtest.features import FEATURE_VERSION, FEATURES
 from app.backtest.simulate import simulate
+from app.backtest.skill import evaluate_skill, validate
 from app.core.config_file import get_config
 from app.market_data.calendar import get_calendar
 from app.market_data.service import ticker_of
@@ -114,6 +115,19 @@ def run_backtest(
             cfg.valuation.risk_free_rate,
         )
         er_map = wf.expected_return_map(pred, bins)
+        vr = rules.validation
+        skill = evaluate_skill(pred, horizon, vr.bootstrap_samples, rules.seed)
+        validation = validate(
+            skill,
+            calibration_error=float(m_profit["ece"] if m_profit["ece"] is not None else 1.0),
+            max_calibration_error=cfg.trade_gates.maximum_calibration_error,
+            oos_periods=len(res.folds),
+            min_oos_periods=cfg.trade_gates.minimum_out_of_sample_periods,
+            survivorship_bias=run.survivorship_bias,
+            min_brier_skill_lower=vr.min_brier_skill_lower,
+            min_auc_lower=vr.min_auc_lower,
+            min_fold_skill_share=vr.min_fold_skill_share,
+        )
         run.metrics = {
             "profit": m_profit,
             "outperform": m_out,
@@ -130,6 +144,8 @@ def run_backtest(
             "folds_trained": len(res.folds),
             "folds_skipped": len(res.skipped_folds),
             "rows_total": len(ds),
+            "skill": skill,
+            "validation": validation,
         }
         run.folds = [*res.folds, *[{**f, "skipped": True} for f in res.skipped_folds]]
         run.simulation = sim
@@ -143,6 +159,16 @@ def run_backtest(
             )
         if len(res.folds) < cfg.trade_gates.minimum_out_of_sample_periods:
             warnings.append("Fewer OOS folds than the trade-gate minimum")
+        skill_fails = [
+            c["reason"]
+            for c in validation["checks"]
+            if c["status"] != "PASS" and c["name"] != "survivorship"
+        ]
+        if skill_fails:
+            warnings.append(
+                "The model shows no reliable edge over simple baselines and cannot be "
+                "activated: " + "; ".join(skill_fails)
+            )
 
         # Final model on everything labelled by the cut-off.
         labelled = ds.dropna(subset=[*FEATURES, *wf.TARGETS])
@@ -171,6 +197,8 @@ def run_backtest(
                 feature_reference=feature_reference(
                     labelled, cfg.monitoring.psi_bins, cfg.monitoring.drift_window_sessions
                 ),
+                skill=skill,
+                validation=validation,
             )
         )
         run.reproducibility = {

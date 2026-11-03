@@ -32,6 +32,10 @@ def simulate(
     periods: list[dict[str, Any]] = []
     trades = 0
     wins = 0
+    gross_gain = 0.0
+    gross_loss = 0.0
+    prev: set[str] = set()
+    turnover: list[float] = []
     for d in rebal:
         day = pred[pred["date"] == d]
         if day["fwd_return"].isna().all():
@@ -50,6 +54,12 @@ def simulate(
         )
         trades += len(pick)
         wins += int((net > 0).sum())
+        gross_gain += float(net[net > 0].sum())
+        gross_loss += float(-net[net < 0].sum())
+        names = set(pick["ticker"])
+        # share of the k slots that changed since the last rebalance
+        turnover.append(len(names ^ prev) / (2 * top_k))
+        prev = names
         periods.append(
             {
                 "date": str(pd.Timestamp(d).date()),
@@ -69,6 +79,9 @@ def simulate(
     dd = rk.max_drawdown(list(zip(range(len(eq)), eq.tolist(), strict=True)))  # type: ignore[arg-type]
     bdd = rk.max_drawdown(list(zip(range(len(beq)), beq.tolist(), strict=True)))  # type: ignore[arg-type]
     vol = float(np.std(s, ddof=1) * math.sqrt(per_year)) if len(s) > 1 else None
+    rf_period = risk_free / per_year
+    downside = np.minimum(s - rf_period, 0.0)
+    dvol = float(np.sqrt(np.mean(downside**2)) * math.sqrt(per_year)) if len(s) > 1 else None
     summary = {
         "periods": len(periods),
         "years": years,
@@ -80,6 +93,9 @@ def simulate(
         "cagr": float(eq[-1] ** (1 / years) - 1) if years > 0 else None,
         "volatility": vol,
         "sharpe": ((float(np.mean(s)) * per_year - risk_free) / vol) if vol else None,
+        "sortino": ((float(np.mean(s)) * per_year - risk_free) / dvol) if dvol else None,
+        "profit_factor": (gross_gain / gross_loss) if gross_loss > 0 else None,
+        "average_turnover": float(np.mean(turnover)) if turnover else None,
         "max_drawdown": dd.max_drawdown,
         "benchmark_total_return": float(beq[-1] - 1),
         "benchmark_cagr": float(beq[-1] ** (1 / years) - 1) if years > 0 else None,

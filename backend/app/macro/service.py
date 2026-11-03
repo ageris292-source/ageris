@@ -153,6 +153,16 @@ def series_as_of(
 ) -> list[tuple[date, float]]:
     """Latest version per date, visible at as_of. Estimated-availability rows
     are only visible if Aegis had retrieved them by as_of."""
+    return [(d, v) for d, v, _ in _visible(db, series, as_of, knowledge_at, start)]
+
+
+def _visible(
+    db: Session,
+    series: str,
+    as_of: datetime | None,
+    knowledge_at: datetime | None,
+    start: date | None,
+) -> list[tuple[date, float, bool]]:
     filters = [MacroObservation.series == series]
     if start is not None:
         filters.append(MacroObservation.period_date >= start)
@@ -183,12 +193,27 @@ def series_as_of(
         .subquery()
     )
     rows = db.execute(
-        select(MacroObservation.period_date, MacroObservation.value)
+        select(MacroObservation.period_date, MacroObservation.value, MacroObservation.licensed)
         .join(ranked, ranked.c.id == MacroObservation.id)
         .where(ranked.c.rn == 1)
         .order_by(MacroObservation.period_date)
     ).all()
-    return [(d, v) for d, v in rows]
+    return [(d, v, bool(lic)) for d, v, lic in rows]
+
+
+def series_licensed(
+    db: Session,
+    series: str,
+    as_of: datetime | None,
+    knowledge_at: datetime | None = None,
+    start: date | None = None,
+) -> bool | None:
+    """Whether every observation of `series` visible at as_of (from `start`) is
+    licensed. None when nothing is visible."""
+    rows = _visible(db, series, as_of, knowledge_at, start)
+    if not rows:
+        return None
+    return all(lic for _, _, lic in rows)
 
 
 def latest_summary(db: Session) -> list[dict[str, object]]:

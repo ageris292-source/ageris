@@ -366,10 +366,16 @@ class OrchestratorRules(_Strict):
     conflict_gap: Annotated[float, Field(gt=0, le=100)]
     max_case_points: Annotated[int, Field(ge=1, le=20)]
     conflict_confidence_penalty: Annotated[float, Field(ge=0, lt=1)]
+    # Agents that act as a constraint, not a vote (audit P2-2): they are left
+    # out of the composite score, and a score below the threshold rules out a
+    # positive tilt. Risk: high measured risk can never be averaged away.
+    veto_agents: dict[str, Annotated[float, Field(ge=0, le=100)]] = {}
 
     @model_validator(mode="after")
     def _consistent(self) -> Self:
-        unknown = (set(self.agent_weights) | set(self.required_agents)) - set(AGENT_NAMES)
+        unknown = (
+            set(self.agent_weights) | set(self.required_agents) | set(self.veto_agents)
+        ) - set(AGENT_NAMES)
         if unknown:
             raise ValueError(f"orchestrator references unknown agents {sorted(unknown)}")
         if abs(sum(self.agent_weights.values()) - 1) > 1e-6:
@@ -469,6 +475,20 @@ class LightGbmParams(_Strict):
     reg_lambda: Annotated[float, Field(ge=0, le=100)]
 
 
+class ModelValidationRules(_Strict):
+    """What a model must show before it can be activated (audit P1-1/P1-2)."""
+
+    bootstrap_samples: Annotated[int, Field(ge=50, le=10_000)] = 300
+    # Lower 90% bound of Brier skill vs the base-rate baseline must exceed this.
+    min_brier_skill_lower: Annotated[float, Field(ge=0, le=1)] = 0.0
+    # Lower 90% bound of AUC must exceed this.
+    min_auc_lower: Annotated[float, Field(ge=0.5, le=1)] = 0.5
+    # Share of walk-forward folds whose skill vs the base rate is positive.
+    min_fold_skill_share: Annotated[float, Field(ge=0, le=1)] = 0.6
+    # Written reason (characters) required to override survivorship.
+    min_override_reason_chars: Annotated[int, Field(ge=10, le=2000)] = 30
+
+
 class BacktestRules(_Strict):
     horizons: Annotated[list[Annotated[int, Field(ge=1, le=250)]], Field(min_length=1)]
     min_train_sessions: Annotated[int, Field(ge=100, le=5000)]
@@ -480,6 +500,7 @@ class BacktestRules(_Strict):
     seed: int
     top_k: Annotated[int, Field(ge=1, le=100)]
     lightgbm: LightGbmParams
+    validation: ModelValidationRules = ModelValidationRules()
 
 
 class AegisConfig(_Strict):

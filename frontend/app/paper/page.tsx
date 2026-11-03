@@ -221,7 +221,7 @@ export default function PaperPage() {
     <div className="space-y-6">
       <PageHeader
         title="Paper trading"
-        description="Simulated money only. An admin approves each order, and the engine re-checks all 24 gates right before the fill."
+        description="Practise with pretend money. You approve every order, and Aegis re-runs all 24 safety checks right before it fills."
         actions={
           pfs && pfs.length > 0 && (
             <>

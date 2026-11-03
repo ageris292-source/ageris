@@ -15,9 +15,11 @@ from app.api.routes.macro import _aware
 from app.api.routes.stocks import Now, _stock
 from app.backtest import registry
 from app.backtest import service as bs
+from app.backtest.skill import activation_allowed
 from app.core.config_file import get_config
 from app.models import BacktestRun, ModelVersion
 from app.monitoring import service as mon
+from app.services.audit import record_audit
 
 router = APIRouter(tags=["backtest"])
 
@@ -109,6 +111,13 @@ def _model_out(m: ModelVersion) -> dict[str, Any]:
         "activated_at": m.activated_at.isoformat() if m.activated_at else None,
         "passes_calibration_gate": m.calibration_error <= cfg.maximum_calibration_error,
         "passes_oos_gate": m.oos_periods >= cfg.minimum_out_of_sample_periods,
+        "skill": m.skill,
+        "validation": m.validation,
+        "activation_override": m.activation_override,
+        "can_activate": activation_allowed(m.validation, None),
+        "needs_override": bool(m.validation)
+        and not activation_allowed(m.validation, None)
+        and activation_allowed(m.validation, "x"),
     }
 
 
@@ -125,11 +134,43 @@ def _model(db: DbSession, mid: int) -> ModelVersion:
     return m
 
 
+class ActivateIn(BaseModel):
+    # Required only when the model fails nothing but an overridable check
+    # (survivorship). Recorded on the model and in the audit log.
+    override_reason: str | None = Field(default=None, max_length=2000)
+
+
 @router.post("/models/{mid}/activate")
-def activate(mid: int, db: DbSession, user: AdminUser, now: Now) -> dict[str, Any]:
+def activate(
+    mid: int, db: DbSession, user: AdminUser, now: Now, body: ActivateIn | None = None
+) -> dict[str, Any]:
     m = _model(db, mid)
     if m.status == "retired":
         raise HTTPException(status.HTTP_409_CONFLICT, "a retired model cannot be re-activated")
+    reason = (body.override_reason or "").strip() if body else ""
+    need = get_config().backtest.validation.min_override_reason_chars
+    if not activation_allowed(m.validation, None):
+        if not activation_allowed(m.validation, "x"):
+            failed = ", ".join((m.validation or {}).get("failed", ["not validated"]))
+            raise HTTPException(
+                status.HTTP_409_CONFLICT,
+                f"model failed validation and cannot be activated: {failed}",
+            )
+        if len(reason) < need:
+            raise HTTPException(
+                status.HTTP_422_UNPROCESSABLE_ENTITY,
+                f"this model needs a written override reason of at least {need} characters "
+                "(universe excludes delisted stocks)",
+            )
+        m.activation_override = reason
+        record_audit(
+            db,
+            action="model.activation_override",
+            actor_user_id=user.id,
+            entity_type="model_version",
+            entity_id=str(m.id),
+            details={"reason": reason, "failed": (m.validation or {}).get("failed", [])},
+        )
     bs.set_status(db, m, "active", user.id)
     # The engine never uses a model that has not been monitored (fail closed),
     # so check it once now; a FAIL here retires it straight away.

@@ -28,6 +28,9 @@ class ProbabilityEstimate:
     calibrated: bool
     calibration_error: float  # expected calibration error on out-of-sample folds
     oos_periods: int  # walk-forward folds evaluated out of sample
+    # Licence status of every series the model read for this estimate (stock and
+    # benchmark). None = not reported; the licensing gate treats it as unknown.
+    inputs_licensed: bool | None = None
 
 
 ProbabilitySource = Callable[[Session, Stock, datetime, int], ProbabilityEstimate | None]

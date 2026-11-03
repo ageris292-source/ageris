@@ -204,7 +204,7 @@ export interface AgentOutput {
   as_of: string;
   knowledge_at: string | null;
   generated_at: string;
-  status: "ok" | "insufficient_data" | "data_unusable" | "failed";
+  status: "ok" | "insufficient_data" | "data_unusable" | "failed" | "not_active";
   score: number | null;
   score_basis: string;
   confidence: number;
@@ -409,8 +409,41 @@ export interface AnalysisReport {
     key_risks: { agent: string; risk: string }[];
     data_warnings: { agent: string; warning: string }[];
     decision: { trade: string; reason: string };
+    /** Constraint agents (risk) that ruled out a positive tilt. */
+    vetoes?: { agent: string; score: number; threshold: number; detail: string }[];
+    /** Agents switched off in this deployment (zero weight). */
+    not_active?: string[];
   };
   narrative: { text: string; source: string; warnings: string[] };
+  replay_fingerprint?: string;
+}
+
+export interface ReplayResult {
+  report_id: number;
+  hash_verified: boolean;
+  reproduced: boolean;
+  config_changed: boolean;
+  note: string;
+  stance: { stored: Stance; replayed: Stance };
+  agents: { agent: string; match: boolean; stored: { status: string; score: number | null }; replayed: { status: string; score: number | null } }[];
+}
+
+export interface ValidationCheck {
+  name: string;
+  status: "PASS" | "FAIL" | "UNKNOWN";
+  value: number | string | null;
+  threshold: number | string | null;
+  reason: string;
+}
+
+export interface ModelSkill {
+  model: { brier: number | null; auc: number | null };
+  baselines: Record<"base_rate" | "momentum" | "logistic", { brier: number | null; auc: number | null }>;
+  brier_skill: Record<"vs_base_rate" | "vs_momentum" | "vs_logistic", number | null>;
+  ci: { auc: [number, number] | null; brier_skill_vs_base_rate: [number, number] | null };
+  fold_skill_share: number | null;
+  worst_fold: { fold: number; brier_skill: number | null; auc: number | null } | null;
+  regimes: Record<string, { rows: number; brier_skill: number | null; auc: number | null }>;
 }
 
 export type TradeGateStatus = GateStatus | "NOT_APPLICABLE";
@@ -538,6 +571,11 @@ export interface ModelRow {
   passes_calibration_gate: boolean;
   passes_oos_gate: boolean;
   backtest_run_id: number;
+  skill?: ModelSkill | null;
+  validation?: { passed: boolean; failed: string[]; overridable: string[]; checks: ValidationCheck[] } | null;
+  activation_override?: string | null;
+  can_activate?: boolean;
+  needs_override?: boolean;
 }
 
 export interface PaperOrderOut {
@@ -1146,8 +1184,13 @@ export const api = {
   runBacktest: (token: string, horizon: number) =>
     request<BacktestDetail>("/backtests", json({ horizon }), token),
   models: (token: string) => request<ModelRow[]>("/models", {}, token),
-  setModel: (token: string, id: number, action: "activate" | "retire") =>
-    request<ModelRow>(`/models/${id}/${action}`, { method: "POST" }, token),
+  setModel: (token: string, id: number, action: "activate" | "retire", overrideReason?: string) =>
+    request<ModelRow>(
+      `/models/${id}/${action}`,
+      action === "activate" && overrideReason ? json({ override_reason: overrideReason }) : { method: "POST" },
+      token,
+    ),
+  replayReport: (token: string, id: number) => request<ReplayResult>(`/reports/${id}/replay`, {}, token),
   placePaperOrder: (token: string, decisionId: number, key: string) =>
     request<PaperOrderOut>(
       "/paper/orders",

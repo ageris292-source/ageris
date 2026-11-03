@@ -49,6 +49,7 @@ import {
   type TradeDecision,
 } from "@/lib/api";
 import { humanize, inr, istDateTime, num } from "@/lib/format";
+import { plainCheck } from "@/lib/plain";
 
 function fmtGate(v: number | string | null): string {
   if (v === null) return "—";
@@ -92,7 +93,7 @@ function Decision({ d }: { d: TradeDecision }) {
         ) : (
           d.first_failure && (
             <div className="text-sm">
-              First failed gate: <span className="font-mono font-medium">{d.first_failure}</span>
+              Stopped by: <span className="font-medium">{plainCheck(d.first_failure)}</span>
             </div>
           )
         )}
@@ -300,7 +301,7 @@ export default function TradePage() {
         toast({
           tone: d.decision === "APPROVED" ? "success" : "warning",
           title: `Proposal ${d.decision.toLowerCase()}`,
-          body: d.decision === "APPROVED" ? "It now waits for human approval on Paper trading." : `First failed gate: ${d.first_failure}`,
+          body: d.decision === "APPROVED" ? "It now waits for human approval on Paper trading." : `Stopped by: ${plainCheck(d.first_failure)}`,
         });
         setTimeout(() => document.getElementById("decision")?.scrollIntoView({ behavior: "smooth", block: "start" }), 50);
       }
@@ -328,7 +329,7 @@ export default function TradePage() {
     <div className="space-y-6">
       <PageHeader
         title="New trade"
-        description="Propose a paper trade and let the deterministic Trade Risk Engine decide. No agent, person or language model can override a gate."
+        description="Describe a trade and Aegis runs 24 safety checks on it, explained in plain words. Nobody, not even the AI, can skip a check."
       />
 
       {health && health.system_mode !== "paper" && (
@@ -518,7 +519,7 @@ export default function TradePage() {
                       <Badge tone="fail" icon={<XCircle size={12} aria-hidden />}>Rejected</Badge>
                     )}
                   </div>
-                  {r.first_failure && <p className="mt-1 font-mono text-[11px] text-muted">first fail: {r.first_failure}</p>}
+                  {r.first_failure && <p className="mt-1 text-xs text-muted">Stopped by: {plainCheck(r.first_failure)}</p>}
                 </MobileItem>
               ))}
             </MobileList>
@@ -549,7 +550,7 @@ export default function TradePage() {
                         <Badge tone="pass" icon={<CheckCircle2 size={12} aria-hidden />}>Approved</Badge>
                       ) : (
                         <Badge tone="fail" icon={<XCircle size={12} aria-hidden />} title={r.first_failure ?? undefined}>
-                          Rejected{r.first_failure ? ` · ${r.first_failure}` : ""}
+                          Rejected{r.first_failure ? ` · ${plainCheck(r.first_failure)}` : ""}
                         </Badge>
                       )}
                     </Td>

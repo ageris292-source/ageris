@@ -47,6 +47,7 @@ PROB = ProbabilityEstimate(
     calibrated=True,
     calibration_error=0.02,
     oos_periods=6,
+    inputs_licensed=True,
 )
 P = TradeProposal(
     ticker="TCS.NS",
@@ -562,3 +563,22 @@ def test_exit_on_unlicensed_prices_is_still_rejected() -> None:
 def test_exit_still_obeys_kill_switch_and_freshness() -> None:
     assert ev(EXIT, cx(held_quantity=10, kill_switch_active=True)).decision == "REJECTED"
     assert ev(EXIT, cx(held_quantity=10, fresh=False)).decision == "REJECTED"
+
+
+# ------------------------------------------- audit P0-4: model input licences --
+
+
+def test_entry_fails_when_the_model_read_unlicensed_inputs() -> None:
+    d = ev(P, cx(probability=dataclasses.replace(PROB, inputs_licensed=False)))
+    g = _gate(d, "data_licensed")
+    assert g.status == "FAIL" and "unlicensed" in g.reason and d.decision == "REJECTED"
+
+
+def test_entry_unknown_when_model_input_licences_are_not_reported() -> None:
+    d = ev(P, cx(probability=dataclasses.replace(PROB, inputs_licensed=None)))
+    assert _gate(d, "data_licensed").status == "UNKNOWN" and d.decision == "REJECTED"
+
+
+def test_exit_does_not_depend_on_model_input_licences() -> None:
+    held = cx(held_quantity=10, probability=dataclasses.replace(PROB, inputs_licensed=False))
+    assert ev(EXIT, held).decision == "APPROVED"

@@ -191,7 +191,7 @@ export default function StocksPage() {
     <>
       <PageHeader
         title="Stocks"
-        description="The research universe: NSE (.NS) and BSE (.BO) end-of-day data, validated and versioned."
+        description="The Indian stocks Aegis follows (NSE and BSE). Search, star the ones you care about, and open any stock to research it."
         actions={isAdmin && <Button variant="primary" icon={<Plus size={16} />} onClick={() => setAdding(true)}>Add stock</Button>}
       />
 

@@ -146,6 +146,20 @@ def set_models(sentiment: SentimentModel | None, embedder: Embedder | None) -> N
         _errors.clear()
 
 
+def sentiment_installed() -> bool:
+    """True when this deployment can score news sentiment: a model is loaded
+    (or injected), or the ML extras are installed and it has not been marked
+    unavailable. False on AEGIS_ML=0 builds."""
+    import importlib.util
+
+    with _lock:
+        if _sentiment is not None:
+            return True
+        if "sentiment" in _errors and "not installed" not in _errors["sentiment"]:
+            return False
+    return importlib.util.find_spec("transformers") is not None
+
+
 def model_status() -> dict[str, str]:
     return {
         "sentiment": _sentiment.name if _sentiment else _errors.get("sentiment", "not loaded"),

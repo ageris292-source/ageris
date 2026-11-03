@@ -99,6 +99,13 @@ def get_report(rid: int, db: DbSession, _u: CurrentUser) -> dict[str, Any]:
     return {**orch.stored(row), "hash_verified": orch.verify(row)}
 
 
+@router.get("/reports/{rid}/replay")
+def replay_report(rid: int, db: DbSession, _u: CurrentUser) -> dict[str, Any]:
+    """Re-run every agent at the report's original point in time and check the
+    result reproduces exactly. Read-only: nothing is recorded."""
+    return orch.replay(db, _report(db, rid))
+
+
 @router.get("/reports/{rid}/markdown", response_class=PlainTextResponse)
 def report_markdown(rid: int, db: DbSession, _u: CurrentUser) -> PlainTextResponse:
     row = _report(db, rid)

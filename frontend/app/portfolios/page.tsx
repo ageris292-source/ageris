@@ -187,7 +187,7 @@ export default function PortfoliosPage() {
     <div className="space-y-6">
       <PageHeader
         title="Portfolios"
-        description="Model portfolios for exposure and what-if analysis. Paper portfolios change only through the paper broker."
+        description="See what you hold, how concentrated it is, and what would change if you added a stock. Paper portfolios change only through paper orders."
         actions={
           <>
             {list && list.length > 0 && (

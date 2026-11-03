@@ -17,6 +17,7 @@ const STATUS_TEXT: Record<AgentOutput["status"], string> = {
   insufficient_data: "Not enough history",
   data_unusable: "Data failed validation",
   failed: "Analysis error",
+  not_active: "Switched off on this server",
 };
 
 /** One agent's output: score, the signals behind it, what would invalidate it. */

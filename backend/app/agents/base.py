@@ -22,6 +22,7 @@ class AgentStatus(StrEnum):
     INSUFFICIENT_DATA = "insufficient_data"  # not enough history to compute honestly
     DATA_UNUSABLE = "data_unusable"  # stored data failed validation
     FAILED = "failed"  # unexpected error; treated like missing data
+    NOT_ACTIVE = "not_active"  # switched off in this deployment (e.g. ML not installed)
 
 
 class AgentInput(BaseModel):
