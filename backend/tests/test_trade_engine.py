@@ -453,6 +453,27 @@ def test_full_pipeline_can_approve_in_paper_mode(
     big = client.post("/trade/proposals", headers=h, json={**proposal, "quantity": 5000}).json()
     assert big["decision"] == "REJECTED"
     assert {"position_sizing", "portfolio_limits"} <= set(big["failed_gates"])
+    # A report saved an hour ago about month-old data is a month-old view:
+    # the research gate must use what the report analysed (audit P0-3).
+    stale = AnalysisReport(
+        stock_id=stock.id,
+        as_of=NOW - timedelta(days=30),
+        knowledge_at=NOW - timedelta(days=30),
+        created_at=NOW - timedelta(hours=1),
+        stance="POSITIVE_TILT",
+        composite_score=70,
+        confidence=0.5,
+        agent_run_ids={},
+        report=rep,
+        report_hash=_hash(rep),
+        config_fingerprint=CFG.fingerprint(),
+    )
+    db.add(stale)
+    db.commit()
+    old = client.post(
+        "/trade/proposals", headers=h, json={**proposal, "report_id": stale.id}
+    ).json()
+    assert old["decision"] == "REJECTED" and "research_report" in old["failed_gates"]
 
 
 def test_gates_status_and_costs_endpoints(
@@ -476,3 +497,68 @@ def test_trade_endpoints_need_auth(client: TestClient) -> None:
     assert client.post("/trade/proposals", json={}).status_code == 401
     for p in ("/trade/proposals", "/trade/gates", "/trade/decisions/1"):
         assert client.get(p).status_code == 401
+
+
+# ------------------------------------------------- audit P0-1 / P0-2 (spread) --
+
+
+def _gate(d: Any, name: str) -> Any:
+    return next(g for g in d.gates if g.name == name)
+
+
+@pytest.mark.parametrize("claimed", [0.0, 1.0, 5.0])
+def test_requester_spread_cannot_make_costs_cheaper_than_schedule(claimed: float) -> None:
+    baseline = ev(P.model_copy(update={"quoted_spread_bps": None}), cx(held_quantity=0))
+    claimed_d = ev(P.model_copy(update={"quoted_spread_bps": claimed}))
+    assert claimed_d.costs is not None and baseline.costs is not None
+    assert claimed_d.costs.round_trip_fraction >= baseline.costs.round_trip_fraction
+
+
+@given(st.floats(min_value=0, max_value=200), st.floats(min_value=0, max_value=200))
+@settings(max_examples=50, deadline=None)
+def test_costs_never_decrease_when_the_claimed_spread_widens(a: float, b: float) -> None:
+    lo, hi = sorted((a, b))
+    s = CFG.trade_engine.cost_schedule
+    sched = CFG.transaction_costs[s]
+    c_lo = round_trip(s, sched, 10_000, 1e9, 20, lo)
+    c_hi = round_trip(s, sched, 10_000, 1e9, 20, hi)
+    assert c_hi.round_trip_fraction >= c_lo.round_trip_fraction
+
+
+def test_spread_gate_labels_the_quote_unverified_and_applies_the_floor() -> None:
+    g = _gate(ev(P.model_copy(update={"quoted_spread_bps": 0})), "spread")
+    floor = 2 * CFG.transaction_costs[CFG.trade_engine.cost_schedule].half_spread_bps
+    assert g.status == "PASS" and g.value == pytest.approx(floor)
+    assert "unverified" in g.reason
+
+
+def test_entry_without_a_quote_stays_unknown() -> None:
+    d = ev(P.model_copy(update={"quoted_spread_bps": None}))
+    assert _gate(d, "spread").status == "UNKNOWN" and d.decision == "REJECTED"
+
+
+EXIT = P.model_copy(
+    update={"side": "sell", "stop_loss": None, "target": None, "quoted_spread_bps": None}
+)
+
+
+def test_exit_without_a_quote_is_approvable_and_labelled() -> None:
+    d = ev(EXIT, cx(held_quantity=10))
+    g = _gate(d, "spread")
+    assert d.decision == "APPROVED", d.failed_gates
+    assert d.requires_human_approval is True
+    assert "assumed" in g.reason and d.metrics["spread_assumed_bps"] == pytest.approx(
+        CFG.liquidity.maximum_spread_bps
+    )
+    assert d.costs is not None
+    assert d.costs.items_bps["half_spread"] == pytest.approx(CFG.liquidity.maximum_spread_bps / 2)
+
+
+def test_exit_on_unlicensed_prices_is_still_rejected() -> None:
+    d = ev(EXIT, cx(held_quantity=10, price_licensed=False, price_source="yahoo"))
+    assert d.decision == "REJECTED" and "data_licensed" in d.failed_gates
+
+
+def test_exit_still_obeys_kill_switch_and_freshness() -> None:
+    assert ev(EXIT, cx(held_quantity=10, kill_switch_active=True)).decision == "REJECTED"
+    assert ev(EXIT, cx(held_quantity=10, fresh=False)).decision == "REJECTED"

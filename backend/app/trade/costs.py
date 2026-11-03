@@ -4,7 +4,8 @@ All components are basis points of traded value, per side. GST applies to
 brokerage + exchange + regulatory fees. Market impact scales linearly with
 participation (% of average daily traded value). Financing accrues over the
 holding period. Fixed per-order charges (e.g. depository fees) are not
-modelled and must be covered by the slippage allowance.
+modelled and must be covered by the slippage allowance. A quoted spread
+can raise the spread component above the schedule but never lower it.
 """
 
 from __future__ import annotations
@@ -32,7 +33,11 @@ def round_trip(
     participation = order_value / adtv * 100
     fees = s.brokerage_bps + s.exchange_fee_bps + s.regulatory_fee_bps
     gst = fees * s.gst_rate_on_fees
-    half_spread = spread_bps / 2 if spread_bps is not None else s.half_spread_bps
+    # A supplied spread is untrusted: it may only make costs MORE conservative,
+    # never cheaper than the configured schedule.
+    half_spread = (
+        max(spread_bps / 2, s.half_spread_bps) if spread_bps is not None else s.half_spread_bps
+    )
     impact = s.market_impact_bps_per_pct_adv * participation
     common = fees + gst + s.securities_tax_bps + s.slippage_bps + half_spread + impact
     buy = common + s.stamp_duty_buy_bps

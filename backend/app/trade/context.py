@@ -91,7 +91,14 @@ def build(
         if rep is not None:
             ctx.report_id = rep.id
             ctx.report_hash_ok = orch.verify(rep)
-            ctx.report_age_hours = (as_of - rep.created_at).total_seconds() / 3600
+            # Age is measured from the data the report ANALYSED, not from when it
+            # was saved: a report written now about last month is last month's view.
+            ages = [
+                (as_of - t).total_seconds() / 3600
+                for t in (rep.as_of, rep.knowledge_at, rep.created_at)
+            ]
+            ctx.report_age_hours = min(ages) if min(ages) < 0 else max(ages)
+            ctx.report_as_of = rep.as_of.isoformat()
             ctx.report_stance = rep.stance
             ctx.report_conflicts = len(rep.report.get("synthesis", {}).get("conflicts", []))
         ctx.probability = probability.estimate(db, stock, as_of, p.horizon_days)

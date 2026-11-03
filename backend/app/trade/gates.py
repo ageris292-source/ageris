@@ -5,8 +5,9 @@ no clock, no model. The same inputs always give the same decision and the
 same hash. A proposal is APPROVED only if every applicable gate is PASS;
 FAIL and UNKNOWN both reject. Exits (sells of an existing long) skip the
 entry-only gates (NOT_APPLICABLE) so risk-reducing trades are never blocked
-by profitability rules, but the kill switch, mode, data and execution
-gates still apply.
+by profitability rules, but the kill switch, mode, data (including the
+licensing rule) and execution gates still apply. An exit without a live
+quote is costed at the maximum acceptable spread, labelled as assumed.
 """
 
 from __future__ import annotations
@@ -24,7 +25,7 @@ from app.trade.costs import CostError, round_trip
 from app.trade.probability import ProbabilityEstimate
 from app.trade.schemas import CostBreakdown, GateResult, TradeProposal, TradeRiskDecision
 
-ENGINE_VERSION = "trade-risk-engine-1.0.0"
+ENGINE_VERSION = "trade-risk-engine-1.1.0"
 
 
 @dataclass
@@ -67,7 +68,8 @@ class GateContext:
     # research
     report_id: int | None = None
     report_hash_ok: bool | None = None
-    report_age_hours: float | None = None
+    report_age_hours: float | None = None  # from the report's analysed as_of
+    report_as_of: str | None = None
     report_stance: str | None = None
     report_conflicts: int | None = None
     probability: ProbabilityEstimate | None = None
@@ -223,7 +225,8 @@ def _research_report(e: _Eval) -> tuple[str, Any, Any, str]:
         "PASS" if ok else "FAIL",
         round(c.report_age_hours, 2),
         t,
-        f"Report #{c.report_id} is {c.report_age_hours:.1f}h old (max {t:g}h)",
+        f"Report #{c.report_id} analysed data {c.report_age_hours:.1f}h old (max {t:g}h)"
+        + (f", as of {c.report_as_of}" if c.report_as_of else ""),
     )
 
 
@@ -275,6 +278,14 @@ def _out_of_sample(e: _Eval) -> tuple[str, Any, Any, str]:
     return "PASS" if ok else "FAIL", pr.oos_periods, t, f"{pr.oos_periods} out-of-sample folds"
 
 
+def _cost_spread_bps(e: _Eval) -> float | None:
+    """Spread used for costing. Exits without a quote are costed at the worst
+    spread the engine accepts (a conservative, labelled assumption)."""
+    if e.p.quoted_spread_bps is None and e.is_exit:
+        return float(e.cfg.liquidity.maximum_spread_bps)
+    return e.p.quoted_spread_bps
+
+
 def _ensure_costs(e: _Eval) -> None:
     if e.costs is None and e.cost_error is None:
         s = e.cfg.trade_engine.cost_schedule
@@ -285,7 +296,7 @@ def _ensure_costs(e: _Eval) -> None:
                 e.value,
                 e.c.adtv,
                 e.p.horizon_days,
-                e.p.quoted_spread_bps,
+                _cost_spread_bps(e),
             )
             e.metrics["round_trip_cost"] = e.costs.round_trip_fraction
         except CostError as exc:
@@ -404,8 +415,29 @@ def _spread(e: _Eval) -> tuple[str, Any, Any, str]:
     t = e.cfg.liquidity.maximum_spread_bps
     s = e.p.quoted_spread_bps
     if s is None:
+        if e.is_exit:
+            # A risk-reducing exit must stay evaluable without a live quote:
+            # cost it at the worst acceptable spread and say so.
+            e.metrics["spread_assumed_bps"] = float(t)
+            return (
+                "PASS",
+                t,
+                t,
+                f"Exit without a live quote: costed at the maximum acceptable spread "
+                f"({t:g} bps, assumed)",
+            )
         return "UNKNOWN", None, t, "No live quote: spread unknown"
-    return "PASS" if s <= t else "FAIL", s, t, f"Spread {s:.1f} bps (max {t:g})"
+    # The quote is supplied by the requester and is not verified: it can never
+    # be lower than the spread already built into the cost schedule.
+    floor = 2 * e.cfg.transaction_costs[e.cfg.trade_engine.cost_schedule].half_spread_bps
+    used = max(float(s), float(floor))
+    return (
+        "PASS" if used <= t else "FAIL",
+        used,
+        t,
+        f"Spread {s:.1f} bps supplied by requester (unverified), "
+        f"evaluated at {used:.1f} bps (floor {floor:g}, max {t:g})",
+    )
 
 
 def _position_sizing(e: _Eval) -> tuple[str, Any, Any, str]:

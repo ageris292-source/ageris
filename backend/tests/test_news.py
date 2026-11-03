@@ -25,7 +25,7 @@ from app.news import nlp
 from app.news.events import build_aliases, classify, mentioned
 from app.news.provider import GoogleNewsProvider, parse_rss
 from app.news.service import chunk_pages
-from tests.conftest import auth_header
+from tests.conftest import auth_header, freeze_clock
 from tests.market_helpers import NOW
 
 XML = (Path(__file__).parent / "fixtures" / "google_news_tcs.xml").read_text()
@@ -181,10 +181,15 @@ def test_provider_outage(api: tuple[TestClient, dict[str, str]]) -> None:
 # -------------------------------------------------------------------- agent --
 
 
-def test_news_agent_is_sourced_and_point_in_time(api: tuple[TestClient, dict[str, str]]) -> None:
+def test_news_agent_is_sourced_and_point_in_time(
+    api: tuple[TestClient, dict[str, str]], monkeypatch: pytest.MonkeyPatch
+) -> None:
     client, h = api
+    # Pin the ingestion clock to the fixture's date: the agent looks back 30
+    # days, so a real clock would age these headlines out over time.
+    as_of = NOW + timedelta(hours=1)
+    freeze_clock(monkeypatch, as_of, "app.news.provider", "app.news.service")
     client.post("/news/TCS.NS/ingest", headers=h)
-    as_of = datetime.now(UTC)
     out = client.get("/news-agent/TCS.NS", headers=h, params={"as_of": as_of.isoformat()}).json()
     assert out["status"] == "ok", out["warnings"]
     assert 0 <= out["score"] <= 100 and out["confidence_basis"] == "heuristic_uncalibrated"

@@ -4,7 +4,7 @@ decay on realised outcomes, auto-disable, admin API."""
 from __future__ import annotations
 
 from collections.abc import Iterator
-from datetime import timedelta
+from datetime import datetime, timedelta
 from decimal import Decimal
 from typing import Any
 
@@ -19,6 +19,7 @@ from sqlalchemy.orm import Session
 from app.api.routes.stocks import get_now
 from app.backtest.data import load_stock
 from app.backtest.features import FEATURES
+from app.backtest.registry import estimate, monitor_blocked
 from app.backtest.service import label_cost, run_backtest, set_status
 from app.core.config_file import get_config
 from app.main import app
@@ -147,6 +148,8 @@ def test_healthy_model_passes_and_logs_predictions_point_in_time(
     assert run.status != "FAIL" and run.action == "none"
     db.refresh(model)
     assert model.status == "active"
+    if run.status in ("PASS", "WARN"):  # a healthy check makes the model usable
+        assert not monitor_blocked(db, model, NOW)
     again = mon.run_monitoring(db, NOW)[0]
     assert again.predictions_logged == 0  # once per stock and session
     with pytest.raises(DBAPIError):  # evidence is immutable
@@ -205,14 +208,13 @@ def test_failed_model_is_unusable_even_without_auto_disable(
         horizon_days=H,
         portfolio_id=0,
     )
-    assert trade_context.build(db, p, NOW)[0].probability is not None
+    # never monitored yet: not usable (fail closed, audit P0-5)
+    assert trade_context.build(db, p, NOW)[0].probability is None
     run = mon.run_monitoring(db, NOW)[0]
     assert run.status == "FAIL" and run.action == "none"
     db.refresh(model)
     assert model.status == "active"
     assert trade_context.build(db, p, NOW)[0].probability is None  # fail closed
-    # point in time: before the failing check, the model was still usable
-    assert trade_context.build(db, p, NOW - timedelta(minutes=1))[0].probability is not None
     assert "FAILED monitoring" in db.scalars(select(Alert)).one().title
 
 
@@ -260,3 +262,49 @@ def test_monitoring_api_is_admin_only(
         assert db.query(ModelMonitorRun).count() == 1
     finally:
         app.dependency_overrides.clear()
+
+
+# ---------------------------------------------- audit P0-5: fail closed --
+
+
+def _run(db: Session, mv: ModelVersion, status: str, at: datetime) -> None:
+    db.add(
+        ModelMonitorRun(
+            as_of=at,
+            model_id=mv.id,
+            status=status,
+            drift={},
+            calibration={},
+            predictions_logged=0,
+            reasons=[],
+            action="none",
+            config_fingerprint=CFG.fingerprint(),
+        )
+    )
+    db.commit()
+
+
+def test_never_monitored_model_is_not_used(db: Session, model: ModelVersion) -> None:
+    assert monitor_blocked(db, model, NOW)
+    assert estimate(db, md.get_stock(db, Ticker.parse("TCS.NS")), NOW, H) is None
+
+
+def test_recent_unknown_is_tolerated_but_a_long_unknown_streak_blocks(
+    db: Session, model: ModelVersion
+) -> None:
+    days = RULES.max_unknown_days
+    _run(db, model, "UNKNOWN", NOW - timedelta(days=days - 1))
+    assert not monitor_blocked(db, model, NOW)
+    _run(db, model, "UNKNOWN", NOW - timedelta(hours=2))
+    assert not monitor_blocked(db, model, NOW)  # streak still within the limit
+    assert monitor_blocked(db, model, NOW + timedelta(days=2))  # streak too long
+
+
+def test_a_pass_resets_the_unknown_streak(db: Session, model: ModelVersion) -> None:
+    days = RULES.max_unknown_days
+    _run(db, model, "UNKNOWN", NOW - timedelta(days=days + 10))
+    _run(db, model, "PASS", NOW - timedelta(days=3))
+    _run(db, model, "UNKNOWN", NOW - timedelta(days=1))
+    assert not monitor_blocked(db, model, NOW)
+    _run(db, model, "FAIL", NOW - timedelta(hours=1))
+    assert monitor_blocked(db, model, NOW)

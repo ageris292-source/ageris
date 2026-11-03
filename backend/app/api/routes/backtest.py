@@ -17,6 +17,7 @@ from app.backtest import registry
 from app.backtest import service as bs
 from app.core.config_file import get_config
 from app.models import BacktestRun, ModelVersion
+from app.monitoring import service as mon
 
 router = APIRouter(tags=["backtest"])
 
@@ -125,11 +126,15 @@ def _model(db: DbSession, mid: int) -> ModelVersion:
 
 
 @router.post("/models/{mid}/activate")
-def activate(mid: int, db: DbSession, user: AdminUser) -> dict[str, Any]:
+def activate(mid: int, db: DbSession, user: AdminUser, now: Now) -> dict[str, Any]:
     m = _model(db, mid)
     if m.status == "retired":
         raise HTTPException(status.HTTP_409_CONFLICT, "a retired model cannot be re-activated")
     bs.set_status(db, m, "active", user.id)
+    # The engine never uses a model that has not been monitored (fail closed),
+    # so check it once now; a FAIL here retires it straight away.
+    mon.monitor_model(db, m, now, user.id)
+    db.refresh(m)
     return _model_out(m)
 
 

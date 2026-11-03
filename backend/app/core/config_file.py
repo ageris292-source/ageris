@@ -427,6 +427,9 @@ class MonitoringRules(_Strict):
     max_live_calibration_error: Fraction
     max_calibration_decay: Fraction
     auto_disable: bool
+    # An active model whose monitoring stays UNKNOWN longer than this is not
+    # used by the trade engine (fail closed).
+    max_unknown_days: Annotated[int, Field(ge=1, le=365)] = 30
 
     @model_validator(mode="after")
     def _consistent(self) -> Self:

@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import os
 from collections.abc import Iterator
+from datetime import datetime, tzinfo
 from pathlib import Path
 
 # Tests wipe tables between cases, so they must NEVER run against a real
@@ -152,3 +153,20 @@ def auth_header(client: TestClient, email: str) -> dict[str, str]:
     r = client.post("/auth/token", data={"username": email, "password": PASSWORD})
     assert r.status_code == 200, r.text
     return {"Authorization": f"Bearer {r.json()['access_token']}"}
+
+
+def freeze_clock(monkeypatch: pytest.MonkeyPatch, when: datetime, *modules: str) -> None:
+    """Make `datetime.now()` inside the named modules return `when`.
+
+    Ingestion code stamps retrieval times with the real clock; tests whose
+    fixtures are dated must pin that clock, or they rot as the calendar moves.
+    """
+    import importlib
+
+    class _Frozen(datetime):
+        @classmethod
+        def now(cls, tz: tzinfo | None = None) -> datetime:  # type: ignore[override]
+            return when if tz is None else when.astimezone(tz)
+
+    for name in modules:
+        monkeypatch.setattr(importlib.import_module(name), "datetime", _Frozen)

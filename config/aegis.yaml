@@ -316,6 +316,7 @@ monitoring:
   max_live_calibration_error: 0.08       # live ECE of P(profit) above this -> FAIL
   max_calibration_decay: 0.05            # live ECE - backtest ECE above this -> FAIL
   auto_disable: true                     # retire the model on FAIL
+  max_unknown_days: 30                   # UNKNOWN longer than this -> model not used
 
 # HTTP hardening (Phase 14). Limits are per client: the socket peer, or the
 # X-Forwarded-For entry appended by a trusted reverse proxy (the number of

@@ -4,7 +4,7 @@ and the fundamental agent. Uses a real recorded Yahoo fundamentals payload."""
 from __future__ import annotations
 
 from collections.abc import Iterator
-from datetime import UTC, date, datetime
+from datetime import UTC, date, datetime, timedelta
 from decimal import Decimal
 
 import httpx
@@ -28,7 +28,7 @@ from app.main import app
 from app.market_data.providers.base import ProviderError
 from app.market_data.types import Ticker
 from app.models import FinancialFact, User
-from tests.conftest import auth_header
+from tests.conftest import auth_header, freeze_clock
 from tests.market_helpers import NOW, load, provider_for
 
 CFG = get_config()
@@ -281,12 +281,16 @@ def test_financials_endpoint(api: tuple[TestClient, dict[str, str]]) -> None:
     assert f["annual"][0]["ratios"]["revenue_growth"] is None
 
 
-def test_agent_ok_now_but_blind_in_the_past(api: tuple[TestClient, dict[str, str]]) -> None:
+def test_agent_ok_now_but_blind_in_the_past(
+    api: tuple[TestClient, dict[str, str]], monkeypatch: pytest.MonkeyPatch
+) -> None:
     client, h = api
+    # Retrieval is stamped by the ingestion clock; pin it just before NOW so
+    # estimated-date figures are known at as_of=NOW on any calendar date.
+    retrieved = NOW - timedelta(hours=1)
+    freeze_clock(monkeypatch, retrieved, "app.fundamentals.providers", "app.fundamentals.service")
     client.post("/financials/TCS.NS/ingest", headers=h)
-    # as_of must be after the (real-clock) retrieval for estimated-date figures.
-    real_now = datetime.now(UTC).isoformat()
-    now = client.get("/fundamental/TCS.NS", headers=h, params={"as_of": real_now}).json()
+    now = client.get("/fundamental/TCS.NS", headers=h, params={"as_of": NOW.isoformat()}).json()
     assert now["status"] == "ok", now["warnings"]
     assert now["metrics"]["pe"] is not None and now["metrics"]["roe"] is not None
     assert any("estimated" in w for w in now["warnings"])

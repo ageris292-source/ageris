@@ -7,7 +7,7 @@ from __future__ import annotations
 import hashlib
 import json
 import logging
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -15,6 +15,7 @@ from sqlalchemy.orm import Session
 from app.backtest import walkforward as wf
 from app.backtest.data import load_benchmark, load_stock
 from app.backtest.features import FEATURE_VERSION, FEATURES, build_features
+from app.core.config_file import get_config
 from app.models import ModelMonitorRun, ModelVersion, Stock
 from app.trade.probability import ProbabilityEstimate
 
@@ -48,15 +49,34 @@ def _models(mv: ModelVersion) -> dict[str, wf.CalibratedModel] | None:
 
 
 def monitor_blocked(db: Session, mv: ModelVersion, as_of: datetime) -> bool:
-    """True if the model's latest monitoring result at as_of is FAIL. Such a
-    model is never used, even if auto-disable is switched off (fail closed)."""
-    status = db.scalar(
-        select(ModelMonitorRun.status)
+    """True if the model must not be used at as_of (fail closed):
+
+    * it has never been monitored at or before as_of;
+    * its latest monitoring result is FAIL (even if auto-disable is off);
+    * its results have been UNKNOWN for longer than
+      `monitoring.max_unknown_days` (no PASS/WARN within that window).
+    """
+    runs = db.execute(
+        select(ModelMonitorRun.status, ModelMonitorRun.as_of)
         .where(ModelMonitorRun.model_id == mv.id, ModelMonitorRun.as_of <= as_of)
         .order_by(ModelMonitorRun.as_of.desc(), ModelMonitorRun.id.desc())
-        .limit(1)
-    )
-    return status == "FAIL"
+    ).all()
+    if not runs:
+        return True
+    latest = runs[0].status
+    if latest == "FAIL":
+        return True
+    if latest != "UNKNOWN":
+        return False
+    # Start of the current UNKNOWN streak: the oldest UNKNOWN run after the
+    # most recent PASS/WARN (or the first run ever, for a new model).
+    start = runs[0].as_of
+    for r in runs:
+        if r.status != "UNKNOWN":
+            break
+        start = r.as_of
+    limit = timedelta(days=get_config().monitoring.max_unknown_days)
+    return bool(as_of - start > limit)
 
 
 def predict(

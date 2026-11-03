@@ -241,10 +241,9 @@ def test_monitor_flags_stop_and_suggests_an_exit(env: dict[str, Any], db: Sessio
     kinds = {e["kind"] for e in ev}
     assert "STOP_HIT" in kinds
     stop = next(e for e in ev if e["kind"] == "STOP_HIT")
-    assert stop["exit_proposal_id"] is not None and stop["exit_decision"] in (
-        "APPROVED",
-        "REJECTED",
-    )
+    # Licensed, fresh data and no live quote: the stop exit must be approvable
+    # (costed at the assumed worst spread) and still wait for a human.
+    assert stop["exit_proposal_id"] is not None and stop["exit_decision"] == "APPROVED"
     assert client.post("/paper/monitor", headers=h).json()["events"] == []  # once per session
     th = client.get(f"/paper/portfolios/{env['pid']}", headers=h).json()["theses"][0]
     assert th["events"][0]["kind"] == "STOP_HIT" and th["status"] == "OPEN"  # human decides
